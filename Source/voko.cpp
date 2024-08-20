@@ -4,139 +4,6 @@
 #define VMA_IMPLEMENTATION 
 #include <vk_mem_alloc.h>
 
-namespace tools
-{
-    bool errorModeSilent = false;
-
-    std::string errorString(VkResult errorCode)
-    {
-        switch (errorCode)
-        {
-#define STR(r) case VK_ ##r: return #r
-            STR(NOT_READY);
-            STR(TIMEOUT);
-            STR(EVENT_SET);
-            STR(EVENT_RESET);
-            STR(INCOMPLETE);
-            STR(ERROR_OUT_OF_HOST_MEMORY);
-            STR(ERROR_OUT_OF_DEVICE_MEMORY);
-            STR(ERROR_INITIALIZATION_FAILED);
-            STR(ERROR_DEVICE_LOST);
-            STR(ERROR_MEMORY_MAP_FAILED);
-            STR(ERROR_LAYER_NOT_PRESENT);
-            STR(ERROR_EXTENSION_NOT_PRESENT);
-            STR(ERROR_FEATURE_NOT_PRESENT);
-            STR(ERROR_INCOMPATIBLE_DRIVER);
-            STR(ERROR_TOO_MANY_OBJECTS);
-            STR(ERROR_FORMAT_NOT_SUPPORTED);
-            STR(ERROR_SURFACE_LOST_KHR);
-            STR(ERROR_NATIVE_WINDOW_IN_USE_KHR);
-            STR(SUBOPTIMAL_KHR);
-            STR(ERROR_OUT_OF_DATE_KHR);
-            STR(ERROR_INCOMPATIBLE_DISPLAY_KHR);
-            STR(ERROR_VALIDATION_FAILED_EXT);
-            STR(ERROR_INVALID_SHADER_NV);
-            STR(ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
-#undef STR
-        default:
-            return "UNKNOWN_ERROR";
-        }
-    }
-
-    std::string physicalDeviceTypeString(VkPhysicalDeviceType type)
-    {
-        switch (type)
-        {
-#define STR(r) case VK_PHYSICAL_DEVICE_TYPE_ ##r: return #r
-            STR(OTHER);
-            STR(INTEGRATED_GPU);
-            STR(DISCRETE_GPU);
-            STR(VIRTUAL_GPU);
-            STR(CPU);
-#undef STR
-        default: return "UNKNOWN_DEVICE_TYPE";
-        }
-    }
-
-    VkBool32 getSupportedDepthFormat(VkPhysicalDevice physicalDevice, VkFormat* depthFormat)
-    {
-        // Since all depth formats may be optional, we need to find a suitable depth format to use
-        // Start with the highest precision packed format
-        std::vector<VkFormat> formatList = {
-            VK_FORMAT_D32_SFLOAT_S8_UINT,
-            VK_FORMAT_D32_SFLOAT,
-            VK_FORMAT_D24_UNORM_S8_UINT,
-            VK_FORMAT_D16_UNORM_S8_UINT,
-            VK_FORMAT_D16_UNORM
-        };
-
-        for (auto& format : formatList)
-        {
-            VkFormatProperties formatProps;
-            vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &formatProps);
-            if (formatProps.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
-            {
-                *depthFormat = format;
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    VkBool32 getSupportedDepthStencilFormat(VkPhysicalDevice physicalDevice, VkFormat* depthStencilFormat)
-    {
-        std::vector<VkFormat> formatList = {
-            VK_FORMAT_D32_SFLOAT_S8_UINT,
-            VK_FORMAT_D24_UNORM_S8_UINT,
-            VK_FORMAT_D16_UNORM_S8_UINT,
-        };
-
-        for (auto& format : formatList)
-        {
-            VkFormatProperties formatProps;
-            vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &formatProps);
-            if (formatProps.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
-            {
-                *depthStencilFormat = format;
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    uint32_t getMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties, VkPhysicalDeviceMemoryProperties memoryProperties, VkBool32* memTypeFound=nullptr)
-    {
-        for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++)
-        {
-            if ((typeBits & 1) == 1)
-            {
-                if ((memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
-                {
-                    if (memTypeFound)
-                    {
-                        *memTypeFound = true;
-                    }
-                    return i;
-                }
-            }
-            typeBits >>= 1;
-        }
-
-        if (memTypeFound)
-        {
-            *memTypeFound = false;
-            return 0;
-        }
-        else
-        {
-            throw std::runtime_error("Could not find a matching memory type");
-        }
-    }
-};
-
-
 void voko::init()
 {
     initSDL();
@@ -200,7 +67,7 @@ void voko::initSurface()
 //    err = vkCreateWin32SurfaceKHR(instance, &surfaceCreateInfo, nullptr, &surface);
 //
 //    if (err != VK_SUCCESS) {
-//        vks::tools::exitFatal("Could not create surface!", err);
+//        vks::vks::tools::exitFatal("Could not create surface!", err);
 //    }
 
     // Get available queue family properties
@@ -531,7 +398,7 @@ void voko::setupDepthStencil()
     VkMemoryAllocateInfo memAllloc{};
     memAllloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memAllloc.allocationSize = memReqs.size;
-    memAllloc.memoryTypeIndex = tools::getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, deviceMemoryProperties);
+    memAllloc.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     VK_CHECK_RESULT(vkAllocateMemory(device, &memAllloc, nullptr, &depthStencil.mem));
     VK_CHECK_RESULT(vkBindImageMemory(device, depthStencil.image, depthStencil.mem, 0));
 
@@ -680,6 +547,9 @@ uint32_t voko::getMemoryTypeIndex(uint32_t typeBits, VkMemoryPropertyFlags prope
     throw "Could not find a suitable memory type!";
 }
 
+void voko::getEnabledFeatures(){}
+
+void voko::getEnabledExtensions(){}
 
 
 void voko::buildCommandBuffers()
@@ -1424,7 +1294,7 @@ void voko::renderLoop()
             // Keyboard key up n Down
             if (e.type == SDL_EVENT_KEY_DOWN)
             {
-                const SDL_Keycode key_code = e.key.keysym.sym;
+                const SDL_Keycode key_code = e.key.key;
                 // Esc: quit
                 if (key_code == SDLK_ESCAPE)
                 {
@@ -1436,16 +1306,16 @@ void voko::renderLoop()
                     
                     switch (key_code)
                     {
-                    case SDLK_w:
+                    case SDLK_W:
                         camera.keys.up = true;
                         break;
-                    case SDLK_s:
+                    case SDLK_S:
                         camera.keys.down = true;
                         break;
-                    case SDLK_a:
+                    case SDLK_A:
                         camera.keys.left = true;
                         break;
-                    case SDLK_d:
+                    case SDLK_D:
                         camera.keys.right = true;
                         break;
                     }
@@ -1456,18 +1326,18 @@ void voko::renderLoop()
                 // Move Camera
                 if (camera.type == Camera::firstperson)
                 {
-                    switch (e.key.keysym.sym)
+                    switch (e.key.key)
                     {
-                    case SDLK_w:
+                    case SDLK_W:
                         camera.keys.up = false;
                         break;
-                    case SDLK_s:
+                    case SDLK_S:
                         camera.keys.down = false;
                         break;
-                    case SDLK_a:
+                    case SDLK_A:
                         camera.keys.left = false;
                         break;
-                    case SDLK_d:
+                    case SDLK_D:
                         camera.keys.right = false;
                         break;
                     }
@@ -1544,7 +1414,7 @@ void voko::initVulkan(){
     // Vulkan Instance
     err = createInstance();
     if (err) {
-        std::cout << "Could not create Vulkan Instance :" << tools::errorString(err) << '\n';
+        std::cout << "Could not create Vulkan Instance :" << vks::tools::errorString(err) << '\n';
         return;
     }
 
@@ -1624,158 +1494,19 @@ uint32_t voko::getQueueFamilyIndex(VkQueueFlags queueFlags) const
 
 VkResult voko::createDeviceAndQueueAndCommandPool(VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char*> enabledExtensions, void* pNextChain, bool useSwapChain, VkQueueFlags requestedQueueTypes)
 {
-    // Desired queues need to be requested upon logical device creation
-            // Due to differing queue family configurations of Vulkan implementations this can be a bit tricky, especially if the application
-            // requests different queue types
-    struct queueFamilyIndices
-    {
-        uint32_t graphics;
-        uint32_t compute;
-        uint32_t transfer;
-    }queueFamilyIndices;
-    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
-
-    // Get queue family indices for the requested queue family types
-    // Note that the indices may overlap depending on the implementation
-
-    const float defaultQueuePriority(0.0f);
-
-    // Graphics queue
-    if (requestedQueueTypes & VK_QUEUE_GRAPHICS_BIT)
-    {
-        queueFamilyIndices.graphics = getQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT);
-        VkDeviceQueueCreateInfo queueInfo{};
-        queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queueInfo.queueFamilyIndex = queueFamilyIndices.graphics;
-        queueInfo.queueCount = 1;
-        queueInfo.pQueuePriorities = &defaultQueuePriority;
-        queueCreateInfos.push_back(queueInfo);
-    }
-    else
-    {
-        queueFamilyIndices.graphics = 0;
-    }
-
-    // Dedicated compute queue
-    if (requestedQueueTypes & VK_QUEUE_COMPUTE_BIT)
-    {
-        queueFamilyIndices.compute = getQueueFamilyIndex(VK_QUEUE_COMPUTE_BIT);
-        if (queueFamilyIndices.compute != queueFamilyIndices.graphics)
-        {
-            // If compute family index differs, we need an additional queue create info for the compute queue
-            VkDeviceQueueCreateInfo queueInfo{};
-            queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queueInfo.queueFamilyIndex = queueFamilyIndices.compute;
-            queueInfo.queueCount = 1;
-            queueInfo.pQueuePriorities = &defaultQueuePriority;
-            queueCreateInfos.push_back(queueInfo);
-        }
-    }
-    else
-    {
-        // Else we use the same queue
-        queueFamilyIndices.compute = queueFamilyIndices.graphics;
-    }
-
-    // Dedicated transfer queue
-    if (requestedQueueTypes & VK_QUEUE_TRANSFER_BIT)
-    {
-        queueFamilyIndices.transfer = getQueueFamilyIndex(VK_QUEUE_TRANSFER_BIT);
-        if ((queueFamilyIndices.transfer != queueFamilyIndices.graphics) && (queueFamilyIndices.transfer != queueFamilyIndices.compute))
-        {
-            // If transfer family index differs, we need an additional queue create info for the transfer queue
-            VkDeviceQueueCreateInfo queueInfo{};
-            queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queueInfo.queueFamilyIndex = queueFamilyIndices.transfer;
-            queueInfo.queueCount = 1;
-            queueInfo.pQueuePriorities = &defaultQueuePriority;
-            queueCreateInfos.push_back(queueInfo);
-        }
-    }
-    else
-    {
-        // Else we use the same queue
-        queueFamilyIndices.transfer = queueFamilyIndices.graphics;
-    }
-
-    // Create the logical device representation
-    std::vector<const char*> deviceExtensions(enabledExtensions);
-    if (useSwapChain)
-    {
-        // If the device will be used for presenting to a display via a swapchain we need to request the swapchain extension
-        deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    }
-
-    VkDeviceCreateInfo deviceCreateInfo = {};
-    deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());;
-    deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
-    deviceCreateInfo.pEnabledFeatures = &enabledFeatures;
-
-    // If a pNext(Chain) has been passed, we need to add it to the device creation info
-    VkPhysicalDeviceFeatures2 physicalDeviceFeatures2{};
-    if (pNextChain) {
-        physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        physicalDeviceFeatures2.features = enabledFeatures;
-        physicalDeviceFeatures2.pNext = pNextChain;
-        deviceCreateInfo.pEnabledFeatures = nullptr;
-        deviceCreateInfo.pNext = &physicalDeviceFeatures2;
-    }
-
-#if (defined(VK_USE_PLATFORM_IOS_MVK) || defined(VK_USE_PLATFORM_MACOS_MVK)) && defined(VK_KHR_portability_subset)
-    // SRS - When running on iOS/macOS with MoltenVK and VK_KHR_portability_subset is defined and supported by the device, enable the extension
-    if (extensionSupported(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME))
-    {
-        deviceExtensions.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
-    }
-#endif
-
-    if (deviceExtensions.size() > 0)
-    {
-        for (const char* enabledExtension : deviceExtensions)
-        {
-            if (!extensionSupported(enabledExtension)) {
-                std::cerr << "Enabled device extension \"" << enabledExtension << "\" is not present at device level\n";
-            }
-        }
-
-        deviceCreateInfo.enabledExtensionCount = (uint32_t)deviceExtensions.size();
-        deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
-    }
-
-    this->enabledFeatures = enabledFeatures;
-
-    VkResult result = vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
-    if (result != VK_SUCCESS)
-    {
-        std::cerr << "Could not create Vulkan device: \n" + tools::errorString(result);
-        return result;
-    }
-
-    // Create a default command pool for graphics command buffers
-    VkCommandPoolCreateFlags createFlags = {};
-    VkCommandPoolCreateInfo cmdPoolInfo = {};
-    cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    cmdPoolInfo.queueFamilyIndex = queueFamilyIndices.graphics;
-    cmdPoolInfo.flags = createFlags;
-    VK_CHECK_RESULT(vkCreateCommandPool(device, &cmdPoolInfo, nullptr, &commandPool));
-
-
     // Get a graphics queue from the device
-    vkGetDeviceQueue(device, queueFamilyIndices.graphics, 0, &queue);
+    vkGetDeviceQueue(device, vulkanDevice->queueFamilyIndices.graphics, 0, &queue);
 
     // Find a suitable depth and/or stencil format
     VkBool32 validFormat{ false };
     // Samples that make use of stencil will require a depth + stencil format, so we select from a different list
     if (requiresStencil) {
-        validFormat = tools::getSupportedDepthStencilFormat(physicalDevice, &depthFormat);
+        validFormat = vks::tools::getSupportedDepthStencilFormat(physicalDevice, &depthFormat);
     }
     else {
-        validFormat = tools::getSupportedDepthFormat(physicalDevice, &depthFormat);
+        validFormat = vks::tools::getSupportedDepthFormat(physicalDevice, &depthFormat);
     }
     assert(validFormat);
-
-
 
     // Create Semaphores
     VkSemaphoreCreateInfo semaphoreCreateInfo{};
@@ -1796,7 +1527,8 @@ VkResult voko::createDeviceAndQueueAndCommandPool(VkPhysicalDeviceFeatures enabl
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = &semaphores.renderComplete;
 
-    return result;
+    
+    return VkResult(true);
 
 }
 
@@ -1827,34 +1559,26 @@ VkResult voko::createPhysicalDevice()
     uint32_t selectedDevice = 0;
     physicalDevice = physicalDevices[selectedDevice];
 
-    // Store properties (including limits), features and memory properties of the physical device (so that examples can check against them)
-    vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
-    vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &deviceMemoryProperties);
 
-    // Queue family properties, used for setting up requested queues upon device creation
-    uint32_t queueFamilyCount;
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
-    assert(queueFamilyCount > 0);
-    queueFamilyProperties.resize(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilyProperties.data());
+    
+    // Derived examples can override this to set actual features (based on above readings) to enable for logical device creation
+    getEnabledFeatures();
 
+    // Vulkan device creation
+    // This is handled by a separate class that gets a logical device representation
+    // and encapsulates functions related to a device
+    vulkanDevice = new vks::VulkanDevice(physicalDevice);
 
-    // Get list of supported extensions
-    uint32_t extCount = 0;
-    vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extCount, nullptr);
-    if (extCount > 0)
-    {
-        std::vector<VkExtensionProperties> extensions(extCount);
-        if (vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extCount, &extensions.front()) == VK_SUCCESS)
-        {
-            for (auto ext : extensions)
-            {
-                supportedDeviceExtensions.push_back(ext.extensionName);
-            }
-        }
+    // Derived examples can enable extensions based on the list of supported extensions read from the physical device
+    getEnabledExtensions();
+    
+    result = vulkanDevice->createLogicalDevice(enabledFeatures, enabledDeviceExtensions, deviceCreatepNextChain);
+    if (result != VK_SUCCESS) {
+        vks::tools::exitFatal("Could not create Vulkan device: \n" + vks::tools::errorString(result), result);
+        return result;
     }
-
+    device = vulkanDevice->logicalDevice;
+    
     return result;
 }
 

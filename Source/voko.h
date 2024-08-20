@@ -15,6 +15,7 @@
 #include "debug.h"
 #include "camera.hpp"
 #include "VulkanTools.h"
+#include "VulkanDevice.h"
 
 // 3rdparty
 #include <vk_mem_alloc.h>
@@ -164,6 +165,8 @@ public:
 	VkShaderModule loadSPIRVShader(std::string filename);
     uint32_t getMemoryTypeIndex(uint32_t typeBits, VkMemoryPropertyFlags properties);
 
+    virtual void getEnabledFeatures();
+    virtual void getEnabledExtensions();
 
 
 
@@ -194,7 +197,10 @@ public:
 	std::string name = "voko";
     uint32_t apiVersion = VK_API_VERSION_1_0;
 
+    /** @brief Set of device extensions to be enabled for this example (must be set in the derived constructor) */
+    std::vector<const char*> enabledDeviceExtensions;
     std::vector<const char*> enabledInstanceExtensions;
+    
     std::vector<std::string> supportedInstanceExtensions;
     /** @brief Example settings that can be changed e.g. by command line arguments */
     struct Settings {
@@ -227,7 +233,8 @@ public:
     uint32_t getQueueFamilyIndex(VkQueueFlags queueFlags)const;
     VkResult createDeviceAndQueueAndCommandPool(VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char*> enabledExtensions, void* pNextChain, bool useSwapChain = true, VkQueueFlags requestedQueueTypes = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 
-
+    /** @brief Encapsulated physical and logical vulkan device */
+    vks::VulkanDevice *vulkanDevice;
     /** @brief Logical device, application's view of the physical device (GPU) */
     VkDevice device{ VK_NULL_HANDLE };
     // Handle to the device graphics queue that command buffers are submitted to

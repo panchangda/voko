@@ -11,17 +11,21 @@
 #include <cassert>
 #include <chrono>
 #include <fstream>
+
 // self defined
 #include "debug.h"
 #include "camera.hpp"
 #include "VulkanTools.h"
 #include "VulkanDevice.h"
+#include "VulkanglTFModel.h"
+#include "VulkanTexture.h"
+#include "VulkanFrameBuffer.hpp"
+
 
 // 3rdparty
 #include <vk_mem_alloc.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
-
 
 
 
@@ -48,6 +52,7 @@
 }
 #endif
 
+
 typedef struct _SwapChainBuffers {
     VkImage image;
     VkImageView view;
@@ -61,10 +66,14 @@ typedef struct _SwapChainBuffers {
 // Default fence timeout in nanoseconds
 #define DEFAULT_FENCE_TIMEOUT 100000000000
 
+// Must match the LIGHT_COUNT define in the shadow and deferred shaders
+#define LIGHT_COUNT 3
+
+
 class voko{
 public:
     voko() = default;
-    ~voko();
+    virtual ~voko();
 
     // Frame counter to display fps
     uint32_t frameCounter = 0;
@@ -91,23 +100,26 @@ public:
     void setupFrameBuffer();
     void buildCommandBuffers();
 
-    // Hello Triangle Preparetions & structs
+    // Hello Triangle Preparations & structs
     // Vertex layout used in this example
     struct Vertex {
         float position[3];
         float color[3];
     };
+    
     // Vertex buffer and attributes
     struct {
         VkDeviceMemory memory{ VK_NULL_HANDLE }; // Handle to the device memory for this buffer
         VkBuffer buffer;						 // Handle to the Vulkan buffer object that the memory is bound to
     } vertices;
+    
     // Index buffer
     struct {
         VkDeviceMemory memory{ VK_NULL_HANDLE };
         VkBuffer buffer;
         uint32_t count{ 0 };
     } indices;
+    
     // Uniform buffer block object
     struct UniformBuffer {
         VkDeviceMemory memory;
@@ -118,6 +130,7 @@ public:
         // We keep a pointer to the mapped buffer, so we can easily update it's contents via a memcpy
         uint8_t* mapped{ nullptr };
     };
+    
     // We use one UBO per frame, so we can have a frame overlap and make sure that uniforms aren't updated while still in use
     std::array<UniformBuffer, MAX_CONCURRENT_FRAMES> uniformBuffers;
 
@@ -154,7 +167,15 @@ public:
     VkDescriptorSetLayout descriptorSetLayout{ VK_NULL_HANDLE };
 
 
+    VkShaderModule loadSPIRVShader(std::string filename);
+    uint32_t getMemoryTypeIndex(uint32_t typeBits, VkMemoryPropertyFlags properties);
 
+    virtual void getEnabledFeatures();
+    virtual void getEnabledExtensions();
+
+    
+
+    // Hellow Triangle Functions
     void createTriangleVertexBuffer();
 	void createVertexBuffer();
     void createUniformBuffers();
@@ -162,14 +183,91 @@ public:
 	void createDescriptorPool();
     void createDescriptorSets();
     void createPipelines();
-	VkShaderModule loadSPIRVShader(std::string filename);
-    uint32_t getMemoryTypeIndex(uint32_t typeBits, VkMemoryPropertyFlags properties);
-
-    virtual void getEnabledFeatures();
-    virtual void getEnabledExtensions();
 
 
+    // Deferred Shadow Vars & Funcs
+    int32_t debugDisplayTarget = 0;
+    bool enableShadows = true;
 
+    // Keep depth range as small as possible
+    // for better shadow map precision
+    float zNear = 0.1f;
+    float zFar = 64.0f;
+    float lightFOV = 100.0f;
+
+    // Depth bias (and slope) are used to avoid shadowing artifacts
+    float depthBiasConstant = 1.25f;
+    float depthBiasSlope = 1.75f;
+    
+    struct {
+        struct {
+            vks::Texture2D colorMap;
+            vks::Texture2D normalMap;
+        } model;
+        struct {
+            vks::Texture2D colorMap;
+            vks::Texture2D normalMap;
+        } background;
+    } textures;
+
+    struct {
+        vkglTF::Model model;
+        vkglTF::Model background;
+    } models;
+    
+    vks::Framebuffer *deferredFrameBuffer;
+    vks::Framebuffer *shadowFrameBuffer;
+
+    struct Light {
+        glm::vec4 position;
+        glm::vec4 target;
+        glm::vec4 color;
+        glm::mat4 viewMatrix;
+    };
+
+    struct UniformDataComposition {
+        glm::vec4 viewPos;
+        Light lights[LIGHT_COUNT];
+        uint32_t useShadows = 1;
+        int32_t debugDisplayTarget = 0;
+    } uniformDataComposition;
+    
+    struct UniformDataOffscreen {
+        glm::mat4 projection;
+        glm::mat4 model;
+        glm::mat4 view;
+        glm::vec4 instancePos[3];
+        int layer{ 0 };
+    } uniformDataOffscreen;
+
+    // This UBO stores the shadow matrices for all of the light sources
+    // The matrices are indexed using geometry shader instancing
+    // The instancePos is used to place the models using instanced draws
+    struct UniformDataShadows{
+        glm::mat4 mvp[LIGHT_COUNT];
+        glm::vec4 instancePos[3];
+    } uniformDataShadows;
+
+    vks::Buffer offscreenUB;
+    vks::Buffer compositionUB;
+    vks::Buffer shadowGeometryShaderUB;
+
+    struct {
+        VkDescriptorSet model{ VK_NULL_HANDLE };
+        VkDescriptorSet background{ VK_NULL_HANDLE };
+        VkDescriptorSet shadow{ VK_NULL_HANDLE };
+        VkDescriptorSet composition{ VK_NULL_HANDLE };
+    } descriptorSets;
+    
+    void loadAssets();
+    void deferredSetup();
+    void shadowSetup();
+    Light initLight(glm::vec3 pos, glm::vec3 target, glm::vec3 color);
+    void initLights();
+    void prepareUniformBuffers();
+    void setupDescriptors();
+    void preparePipelines();
+    void buildDeferredCommandBuffers();
 
 
 	void init();
@@ -269,9 +367,8 @@ public:
     } semaphores;
     std::vector<VkFence> waitFences;
     bool requiresStencil{ false };
-
-
-
+    
+    // VMA allocator & Initialization
     VmaAllocator allocator;
     VkResult createVMA();
 

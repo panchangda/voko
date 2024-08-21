@@ -4,6 +4,9 @@
 #define VMA_IMPLEMENTATION 
 #include <vk_mem_alloc.h>
 
+
+#include "VulkanglTFModel.h"
+
 void voko::init()
 {
     initSDL();
@@ -11,8 +14,6 @@ void voko::init()
     initVulkan();
 
     prepare();
-    
-
 }
 
 void voko::prepare()
@@ -37,6 +38,8 @@ void voko::prepare()
     camera.setRotation(glm::vec3(0.0f));
     camera.setPerspective(60.0f, (float)width / (float)height, 1.0f, 256.0f);
 
+    
+    // Hello Triangle Functions
     createTriangleVertexBuffer();
     createUniformBuffers();
     createDescriptorSetLayout();
@@ -44,6 +47,11 @@ void voko::prepare()
     createDescriptorSets();
     createPipelines();
     buildCommandBuffers();
+
+
+    // Deferred Shadow Funcs
+    loadAssets();
+    
     
     prepared = true;
     
@@ -51,10 +59,13 @@ void voko::prepare()
 
 void voko::initSurface()
 {
-    SDL_bool surfaceCreateRes =  SDL_Vulkan_CreateSurface(SDLWindow, instance, nullptr, &surface);
-    if (surfaceCreateRes == false)
-    {
-        std::cerr << ("Could not use SDL Window to create VkSurfaceKHR!");
+    int surfaceCreateRes =  SDL_Vulkan_CreateSurface(SDLWindow, instance, nullptr, &surface);
+    if (surfaceCreateRes != 0) {
+        // The function failed
+        std::cerr << "Failed to create Vulkan surface: " << SDL_GetError() << std::endl;
+    } else {
+        // The function succeeded
+        // std::cout << "Vulkan surface created successfully!" << std::endl;
     }
 
 
@@ -1170,6 +1181,8 @@ void voko::createPipelines()
 }
 
 
+
+
 void voko::render()
 {
     if (!prepared) 
@@ -1492,95 +1505,8 @@ uint32_t voko::getQueueFamilyIndex(VkQueueFlags queueFlags) const
     std::cerr << "Could not find a matching queue family index";
 }
 
-VkResult voko::createDeviceAndQueueAndCommandPool(VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char*> enabledExtensions, void* pNextChain, bool useSwapChain, VkQueueFlags requestedQueueTypes)
-{
-    // Get a graphics queue from the device
-    vkGetDeviceQueue(device, vulkanDevice->queueFamilyIndices.graphics, 0, &queue);
-
-    // Find a suitable depth and/or stencil format
-    VkBool32 validFormat{ false };
-    // Samples that make use of stencil will require a depth + stencil format, so we select from a different list
-    if (requiresStencil) {
-        validFormat = vks::tools::getSupportedDepthStencilFormat(physicalDevice, &depthFormat);
-    }
-    else {
-        validFormat = vks::tools::getSupportedDepthFormat(physicalDevice, &depthFormat);
-    }
-    assert(validFormat);
-
-    // Create Semaphores
-    VkSemaphoreCreateInfo semaphoreCreateInfo{};
-    semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    // Create a semaphore used to synchronize image presentation
-	// Ensures that the image is displayed before we start submitting new commands to the queue
-    VK_CHECK_RESULT(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &semaphores.presentComplete));
-    // Create a semaphore used to synchronize command submission
-    // Ensures that the image is not presented until all commands have been submitted and executed
-    VK_CHECK_RESULT(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &semaphores.renderComplete));
 
 
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    VkPipelineStageFlags submitPipelineStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    submitInfo.pWaitDstStageMask = &submitPipelineStages;
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &semaphores.presentComplete;
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &semaphores.renderComplete;
-
-    
-    return VkResult(true);
-
-}
-
-VkResult voko::createPhysicalDevice()
-{
-    VkResult result;
-
-    // Physical device
-    uint32_t gpuCount = 0;
-    // Get number of available physical devices
-    VK_CHECK_RESULT(vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr));
-    if (gpuCount == 0) {
-        std::cerr << "No device with Vulkan support found ";
-        return VkResult{ VK_ERROR_UNKNOWN };
-    }
-    // Enumerate devices
-    std::vector<VkPhysicalDevice> physicalDevices(gpuCount);
-    result = vkEnumeratePhysicalDevices(instance, &gpuCount, physicalDevices.data());
-    if (result){
-        std::cerr << "Could not enumerate physical devices: \n";
-        return result;
-    }
-
-    // GPU selection
-
-    // Select physical device to be used for the Vulkan example
-    // Defaults to the first device unless specified by command line
-    uint32_t selectedDevice = 0;
-    physicalDevice = physicalDevices[selectedDevice];
-
-
-    
-    // Derived examples can override this to set actual features (based on above readings) to enable for logical device creation
-    getEnabledFeatures();
-
-    // Vulkan device creation
-    // This is handled by a separate class that gets a logical device representation
-    // and encapsulates functions related to a device
-    vulkanDevice = new vks::VulkanDevice(physicalDevice);
-
-    // Derived examples can enable extensions based on the list of supported extensions read from the physical device
-    getEnabledExtensions();
-    
-    result = vulkanDevice->createLogicalDevice(enabledFeatures, enabledDeviceExtensions, deviceCreatepNextChain);
-    if (result != VK_SUCCESS) {
-        vks::tools::exitFatal("Could not create Vulkan device: \n" + vks::tools::errorString(result), result);
-        return result;
-    }
-    device = vulkanDevice->logicalDevice;
-    
-    return result;
-}
 
 VkResult voko::createInstance(){
     VkApplicationInfo appInfo{};
@@ -1706,6 +1632,347 @@ VkResult voko::createInstance(){
     }
 
     return result;
+}
+
+VkResult voko::createPhysicalDevice()
+{
+    VkResult result;
+
+    // Physical device
+    uint32_t gpuCount = 0;
+    // Get number of available physical devices
+    VK_CHECK_RESULT(vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr));
+    if (gpuCount == 0) {
+        std::cerr << "No device with Vulkan support found ";
+        return VkResult{ VK_ERROR_UNKNOWN };
+    }
+    // Enumerate devices
+    std::vector<VkPhysicalDevice> physicalDevices(gpuCount);
+    result = vkEnumeratePhysicalDevices(instance, &gpuCount, physicalDevices.data());
+    if (result){
+        std::cerr << "Could not enumerate physical devices: \n";
+        return result;
+    }
+
+    // GPU selection
+
+    // Select physical device to be used for the Vulkan example
+    // Defaults to the first device unless specified by command line
+    uint32_t selectedDevice = 0;
+    physicalDevice = physicalDevices[selectedDevice];
+
+
+    
+    // Derived examples can override this to set actual features (based on above readings) to enable for logical device creation
+    getEnabledFeatures();
+
+    // Vulkan device creation
+    // This is handled by a separate class that gets a logical device representation
+    // and encapsulates functions related to a device
+    vulkanDevice = new vks::VulkanDevice(physicalDevice);
+
+    // Derived examples can enable extensions based on the list of supported extensions read from the physical device
+    getEnabledExtensions();
+    
+    result = vulkanDevice->createLogicalDevice(enabledFeatures, enabledDeviceExtensions, deviceCreatepNextChain);
+    if (result != VK_SUCCESS) {
+        vks::tools::exitFatal("Could not create Vulkan device: \n" + vks::tools::errorString(result), result);
+        return result;
+    }
+    device = vulkanDevice->logicalDevice;
+    
+    return result;
+}
+
+VkResult voko::createDeviceAndQueueAndCommandPool(VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char*> enabledExtensions, void* pNextChain, bool useSwapChain, VkQueueFlags requestedQueueTypes)
+{
+    // Get a graphics queue from the device
+    vkGetDeviceQueue(device, vulkanDevice->queueFamilyIndices.graphics, 0, &queue);
+
+    // Find a suitable depth and/or stencil format
+    VkBool32 validFormat{ false };
+    // Samples that make use of stencil will require a depth + stencil format, so we select from a different list
+    if (requiresStencil) {
+        validFormat = vks::tools::getSupportedDepthStencilFormat(physicalDevice, &depthFormat);
+    }
+    else {
+        validFormat = vks::tools::getSupportedDepthFormat(physicalDevice, &depthFormat);
+    }
+    assert(validFormat);
+
+    // Create Semaphores
+    VkSemaphoreCreateInfo semaphoreCreateInfo{};
+    semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    // Create a semaphore used to synchronize image presentation
+    // Ensures that the image is displayed before we start submitting new commands to the queue
+    VK_CHECK_RESULT(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &semaphores.presentComplete));
+    // Create a semaphore used to synchronize command submission
+    // Ensures that the image is not presented until all commands have been submitted and executed
+    VK_CHECK_RESULT(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &semaphores.renderComplete));
+
+
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    VkPipelineStageFlags submitPipelineStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    submitInfo.pWaitDstStageMask = &submitPipelineStages;
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = &semaphores.presentComplete;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &semaphores.renderComplete;
+
+    
+    return VkResult();
+
+}
+
+void voko::loadAssets()
+{
+    const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::PreMultiplyVertexColors | vkglTF::FileLoadingFlags::FlipY;
+    models.model.loadFromFile(getAssetPath() + "models/armor/armor.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    models.background.loadFromFile(getAssetPath() + "models/deferred_box.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    textures.model.colorMap.loadFromFile(getAssetPath() + "models/armor/colormap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    textures.model.normalMap.loadFromFile(getAssetPath() + "models/armor/normalmap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    textures.background.colorMap.loadFromFile(getAssetPath() + "textures/stonefloor02_color_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    textures.background.normalMap.loadFromFile(getAssetPath() + "textures/stonefloor02_normal_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+}
+
+void voko::deferredSetup()
+{
+    deferredFrameBuffer = new vks::Framebuffer(vulkanDevice);
+#if defined(__ANDROID__)
+    // Use max. screen dimension as deferred framebuffer size
+    deferredFrameBuffer->width = std::max(width, height);
+    deferredFrameBuffer->height = std::max(width, height);
+#else
+    deferredFrameBuffer->width = 2048;
+    deferredFrameBuffer->height = 2048;
+#endif
+    
+    // Four attachments (3 color, 1 depth)
+    vks::AttachmentCreateInfo attachmentInfo = {};
+    attachmentInfo.width = deferredFrameBuffer->width;
+    attachmentInfo.height = deferredFrameBuffer->height;
+    attachmentInfo.layerCount = 1;
+    attachmentInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+    // Color attachments
+    // Attachment 0: (World space) Positions
+    attachmentInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+    deferredFrameBuffer->addAttachment(attachmentInfo);
+
+    // Attachment 1: (World space) Normals
+    attachmentInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+    deferredFrameBuffer->addAttachment(attachmentInfo);
+
+    // Attachment 2: Albedo (color)
+    attachmentInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+    deferredFrameBuffer->addAttachment(attachmentInfo);
+
+    // Depth attachment
+    // Find a suitable depth format
+    VkFormat attDepthFormat;
+    VkBool32 validDepthFormat = vks::tools::getSupportedDepthFormat(physicalDevice, &attDepthFormat);
+    assert(validDepthFormat);
+
+    attachmentInfo.format = attDepthFormat;
+    attachmentInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    deferredFrameBuffer->addAttachment(attachmentInfo);
+
+    // Create sampler to sample from the color attachments
+    VK_CHECK_RESULT(deferredFrameBuffer->createSampler(VK_FILTER_NEAREST, VK_FILTER_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
+
+    // Create default renderpass for the framebuffer
+    VK_CHECK_RESULT(deferredFrameBuffer->createRenderPass());
+}
+
+void voko::shadowSetup()
+{
+    shadowFrameBuffer = new vks::Framebuffer(vulkanDevice);
+
+    // Shadowmap properties
+#if defined(__ANDROID__)
+    // Use smaller shadow maps on mobile due to performance reasons
+    shadowFrameBuffer->width = 1024;
+    shadowFrameBuffer->height = 1024;
+#else
+    shadowFrameBuffer->width = 2048;
+    shadowFrameBuffer->height = 2048;
+#endif
+
+    // Find a suitable depth format
+    VkFormat shadowMapFormat;
+    VkBool32 validShadowMapFormat = vks::tools::getSupportedDepthFormat(physicalDevice, &shadowMapFormat);
+    assert(validShadowMapFormat);
+
+    // Create a layered depth attachment for rendering the depth maps from the lights' point of view
+    // Each layer corresponds to one of the lights
+    // The actual output to the separate layers is done in the geometry shader using shader instancing
+    // We will pass the matrices of the lights to the GS that selects the layer by the current invocation
+    vks::AttachmentCreateInfo attachmentInfo = {};
+    attachmentInfo.format = shadowMapFormat;
+    attachmentInfo.width = shadowFrameBuffer->width;
+    attachmentInfo.height = shadowFrameBuffer->height;
+    attachmentInfo.layerCount = LIGHT_COUNT;
+    attachmentInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    shadowFrameBuffer->addAttachment(attachmentInfo);
+
+    // Create sampler to sample from to depth attachment
+    // Used to sample in the fragment shader for shadowed rendering
+    VK_CHECK_RESULT(shadowFrameBuffer->createSampler(VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
+
+    // Create default renderpass for the framebuffer
+    VK_CHECK_RESULT(shadowFrameBuffer->createRenderPass());
+}
+voko::Light voko::initLight(glm::vec3 pos, glm::vec3 target, glm::vec3 color)
+{
+    Light light;
+    light.position = glm::vec4(pos, 1.0f);
+    light.target = glm::vec4(target, 0.0f);
+    light.color = glm::vec4(color, 0.0f);
+    return light;
+}
+void voko::initLights()
+{
+    uniformDataComposition.lights[0] = initLight(glm::vec3(-14.0f, -0.5f, 15.0f), glm::vec3(-2.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.5f, 0.5f));
+    uniformDataComposition.lights[1] = initLight(glm::vec3(14.0f, -4.0f, 12.0f), glm::vec3(2.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    uniformDataComposition.lights[2] = initLight(glm::vec3(0.0f, -10.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f));
+}
+
+void voko::prepareUniformBuffers()
+{
+    // Offscreen vertex shader
+    VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &offscreenUB, sizeof(UniformDataOffscreen)));
+
+    // Deferred fragment shader
+    VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &compositionUB, sizeof(UniformDataComposition)));
+
+    // Shadow map vertex shader (matrices from shadow's pov)
+    VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &shadowGeometryShaderUB, sizeof(UniformDataShadows)));
+
+    // Map persistent
+    VK_CHECK_RESULT(offscreenUB.map());
+    VK_CHECK_RESULT(compositionUB.map());
+    VK_CHECK_RESULT(shadowGeometryShaderUB.map());
+
+    // Setup instanced model positions
+    uniformDataOffscreen.instancePos[0] = glm::vec4(0.0f);
+    uniformDataOffscreen.instancePos[1] = glm::vec4(-7.0f, 0.0, -4.0f, 0.0f);
+    uniformDataOffscreen.instancePos[2] = glm::vec4(4.0f, 0.0, -6.0f, 0.0f);
+}
+
+void voko::setupDescriptors()
+{
+    // Pool
+		std::vector<VkDescriptorPoolSize> poolSizes = {
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 12),
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 16)
+		};
+		VkDescriptorPoolCreateInfo descriptorPoolInfo =vks::initializers::descriptorPoolCreateInfo(poolSizes, 4);
+		VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &descriptorPool));
+
+		// Layout
+		std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
+			// Binding 0: Vertex shader uniform buffer
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0),
+			// Binding 1: Position texture
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1),
+			// Binding 2: Normals texture
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2),
+			// Binding 3: Albedo texture
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3),
+			// Binding 4: Fragment shader uniform buffer
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 4),
+			// Binding 5: Shadow map
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 5),
+		};
+		VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
+		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &descriptorSetLayout));
+
+		// Sets
+		std::vector<VkWriteDescriptorSet> writeDescriptorSets;
+		VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &descriptorSetLayout, 1);
+
+		// Image descriptors for the offscreen color attachments
+		VkDescriptorImageInfo texDescriptorPosition =
+			vks::initializers::descriptorImageInfo(
+				deferredFrameBuffer->sampler,
+				deferredFrameBuffer->attachments[0].view,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+		VkDescriptorImageInfo texDescriptorNormal =
+			vks::initializers::descriptorImageInfo(
+				deferredFrameBuffer->sampler,
+				deferredFrameBuffer->attachments[1].view,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+		VkDescriptorImageInfo texDescriptorAlbedo =
+			vks::initializers::descriptorImageInfo(
+				deferredFrameBuffer->sampler,
+				deferredFrameBuffer->attachments[2].view,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+		VkDescriptorImageInfo texDescriptorShadowMap =
+			vks::initializers::descriptorImageInfo(
+				shadowFrameBuffer->sampler,
+				shadowFrameBuffer->attachments[0].view,
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+
+		// Deferred composition
+		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.composition));
+		writeDescriptorSets = {
+			// Binding 1: World space position texture
+			vks::initializers::writeDescriptorSet(descriptorSets.composition, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, &texDescriptorPosition),
+			// Binding 2: World space normals texture
+			vks::initializers::writeDescriptorSet(descriptorSets.composition, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &texDescriptorNormal),
+			// Binding 3: Albedo texture
+			vks::initializers::writeDescriptorSet(descriptorSets.composition, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &texDescriptorAlbedo),
+			// Binding 4: Fragment shader uniform buffer
+			vks::initializers::writeDescriptorSet(descriptorSets.composition, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4, &compositionUB.descriptor),
+			// Binding 5: Shadow map
+			vks::initializers::writeDescriptorSet(descriptorSets.composition, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &texDescriptorShadowMap),
+		};
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+
+		// Offscreen (scene)
+
+		// Model
+		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.model));
+		writeDescriptorSets = {
+			// Binding 0: Vertex shader uniform buffer
+			vks::initializers::writeDescriptorSet(descriptorSets.model, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &offscreenUB.descriptor),
+			// Binding 1: Color map
+			vks::initializers::writeDescriptorSet(descriptorSets.model, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, &textures.model.colorMap.descriptor),
+			// Binding 2: Normal map
+			vks::initializers::writeDescriptorSet(descriptorSets.model, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.model.normalMap.descriptor)
+		};
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+
+		// Background
+		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.background));
+		writeDescriptorSets = {
+			// Binding 0: Vertex shader uniform buffer
+			vks::initializers::writeDescriptorSet(descriptorSets.background, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &offscreenUB.descriptor),
+			// Binding 1: Color map
+			vks::initializers::writeDescriptorSet(descriptorSets.background, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, &textures.background.colorMap.descriptor),
+			// Binding 2: Normal map
+			vks::initializers::writeDescriptorSet(descriptorSets.background, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.background.normalMap.descriptor)
+		};
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+
+		// Shadow mapping
+		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.shadow));
+		writeDescriptorSets = {
+			// Binding 0: Vertex shader uniform buffer
+			vks::initializers::writeDescriptorSet(descriptorSets.shadow, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &shadowGeometryShaderUB.descriptor),
+		};
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+}
+
+void voko::preparePipelines()
+{
+    
 }
 
 voko::~voko()

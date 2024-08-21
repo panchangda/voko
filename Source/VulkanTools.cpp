@@ -14,8 +14,8 @@ const std::string getAssetPath()
 {
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
 	return "";
-#elif defined(VK_EXAMPLE_ASSETS_DIR)
-	return VK_EXAMPLE_ASSETS_DIR;
+#elif defined(VOKO_ASSET_DIR)
+	return VOKO_ASSET_DIR;
 #else
 	return "./../assets/";
 #endif

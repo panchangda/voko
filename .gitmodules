@@ -14,3 +14,7 @@
 [submodule "ThirdParty/tinygltf"]
 	path = ThirdParty/tinygltf
 	url = https://github.com/syoyo/tinygltf.git
+	
+[submodule "assets"]
+	path = assets
+	url = https://github.com/SaschaWillems/Vulkan-Assets.git

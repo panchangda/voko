@@ -37,7 +37,7 @@ add_definitions(
 	-DVOKO_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Shader/"
 )
 add_definitions(
-	-DVOKO_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Asset/"
+	-DVOKO_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/"
 )
 
 add_subdirectory(ThirdParty)

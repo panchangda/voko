@@ -1,22 +1,9 @@
 # get all .cpp file under Source
-# file(GLOB SOURCES "*.cpp")
-set(ALL_SOURCE_FILES
-  voko.h 
-  voko.cpp 
-  debug.h
-  debug.cpp
-  main.cpp
-  camera.hpp
-  VulkanglTFModel.h
-  VulkanglTFModel.cpp
-  VulkanDevice.h
-  VulkanDevice.cpp
-  VulkanBuffer.h
-  VulkanBuffer.cpp
-  VulkanTools.h
-  VulkanTools.cpp
-  VulkanInitializers.hpp
-)
+
+file(GLOB ALL_SOURCE_FILES "*.cpp" "*.hpp" "*.h")
+
+
+
 add_executable(${EXECUTABLE_NAME} ${ALL_SOURCE_FILES})
 
 set_property(TARGET ${EXECUTABLE_NAME} PROPERTY CXX_STANDARD 20)
@@ -28,20 +15,30 @@ target_compile_definitions(${EXECUTABLE_NAME} PUBLIC GLM_FORCE_RADIANS)
 
 
 
-# include current dir 
+# include current dir
 target_include_directories(${EXECUTABLE_NAME} 
   PUBLIC 
   ${CMAKE_CURRENT_SOURCE_DIR}
   )
 
-# include 3rdparty dir
-# include_directories(../ThirdParty/ktx/include)
-# include_directories(../ThirdParty/ktx/other_include)
-target_include_directories(${EXECUTABLE_NAME} 
+# process ktx specially, because directly add as a submodule will include too many irrelevant build targets
+# include 3rdparty dirs: ktx
+include_directories(${EXECUTABLE_NAME} 
   PUBLIC 
   ${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/ktx/include
   ${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/ktx/other_include
-)
+  )
+
+# add all ktx files as a library
+  set(KTX_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../ThirdParty/ktx)
+  set(KTX_SOURCES
+      ${KTX_DIR}/lib/texture.c
+      ${KTX_DIR}/lib/hashlist.c
+      ${KTX_DIR}/lib/checkheader.c
+      ${KTX_DIR}/lib/swap.c
+      ${KTX_DIR}/lib/memstream.c
+      ${KTX_DIR}/lib/filestream.c)
+add_library(ktx STATIC ${KTX_SOURCES})
 
 # link to 3rdparty libs
 target_link_libraries(${EXECUTABLE_NAME} 
@@ -50,6 +47,7 @@ glm::glm
 SDL3::SDL3 
 GPUOpen::VulkanMemoryAllocator
 tinygltf
+ktx  # Link the ktx library here
 )
 
 

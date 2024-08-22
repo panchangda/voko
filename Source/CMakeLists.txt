@@ -1,6 +1,7 @@
 # get all .cpp file under Source
 
-file(GLOB ALL_SOURCE_FILES "*.cpp" "*.hpp" "*.h")
+# recursively add all files
+file(GLOB_RECURSE ALL_SOURCE_FILES "*.cpp" "*.hpp" "*.h")
 
 
 

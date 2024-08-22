@@ -27,6 +27,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#include "SceneGraph/Scene.h"
 
 
 // Macro to check and display Vulkan return results
@@ -185,6 +186,10 @@ public:
     void createPipelines();
 
 
+    // Scene Management
+    std::unique_ptr<Scene> Scene;
+    void LoadScene();
+    
     // Deferred Shadow Vars & Funcs
     int32_t debugDisplayTarget = 0;
     bool enableShadows = true;

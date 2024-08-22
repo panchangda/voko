@@ -1171,7 +1171,11 @@ void voko::createPipelines()
     vkDestroyShaderModule(device, shaderStages[1].module, nullptr);
 }
 
-
+void voko::LoadScene()
+{
+    // Scene = std::make_unique<Scene>("ExampleScene");
+    
+}
 
 
 void voko::render()

@@ -34,25 +34,33 @@ void voko::prepare()
 	// Setup a default look-at camera
     camera.type = Camera::CameraType::firstperson;
     camera.movementSpeed = 5.0f;
-    camera.setPosition(glm::vec3(0.0f, 0.0f, -2.5f));
-    camera.setRotation(glm::vec3(0.0f));
-    camera.setPerspective(60.0f, (float)width / (float)height, 1.0f, 256.0f);
+    camera.rotationSpeed = 0.25f;
+    camera.position = { 2.15f, 0.3f, -8.75f };
+    camera.setRotation(glm::vec3(-0.75f, 12.5f, 0.0f));
+    camera.setPerspective(60.0f, (float)width / (float)height, zNear, zFar);
+    timerSpeed *= 0.25f;
 
     
     // Hello Triangle Functions
-    createTriangleVertexBuffer();
-    createUniformBuffers();
-    createDescriptorSetLayout();
-    createDescriptorPool();
-    createDescriptorSets();
-    createPipelines();
-    buildCommandBuffers();
+    // createTriangleVertexBuffer();
+    // createUniformBuffers();
+    // createDescriptorSetLayout();
+    // createDescriptorPool();
+    // createDescriptorSets();
+    // createPipelines();
+
 
 
     // Deferred Shadow Funcs
     loadAssets();
-    
-    
+    deferredSetup();
+    shadowSetup();
+    initLights();
+    prepareUniformBuffers();
+    setupDescriptors();
+    preparePipelines();
+    buildCommandBuffers();
+    buildDeferredCommandBuffer();
     prepared = true;
     
 }
@@ -565,8 +573,7 @@ void voko::getEnabledExtensions(){}
 
 void voko::buildCommandBuffers()
 {
-    VkCommandBufferBeginInfo cmdBufInfo{};
-    cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
 
     // Set clear values for all framebuffer attachments with loadOp set to clear
     // We use two attachments (color and depth) that are cleared at the start of the subpass and as such we need to set clear values for both
@@ -574,9 +581,7 @@ void voko::buildCommandBuffers()
     clearValues[0].color = { { 0.0f, 0.0f, 0.0f, 1.0f } };
     clearValues[1].depthStencil = { 1.0f, 0 };
 
-    VkRenderPassBeginInfo renderPassBeginInfo{};
-    renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassBeginInfo.pNext = nullptr;
+    VkRenderPassBeginInfo renderPassBeginInfo = vks::initializers::renderPassBeginInfo();
     renderPassBeginInfo.renderPass = renderPass;
     renderPassBeginInfo.renderArea.offset.x = 0;
     renderPassBeginInfo.renderArea.offset.y = 0;
@@ -596,35 +601,21 @@ void voko::buildCommandBuffers()
 
         vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        // Update dynamic viewport state
-        VkViewport viewport{};
-        viewport.height = (float)height;
-        viewport.width = (float)width;
-        viewport.minDepth = (float)0.0f;
-        viewport.maxDepth = (float)1.0f;
-        // Update dynamic scissor state
-        VkRect2D scissor{};
-        scissor.extent.width = width;
-        scissor.extent.height = height;
-        scissor.offset.x = 0;
-        scissor.offset.y = 0;
-
+        VkViewport viewport = vks::initializers::viewport((float)width, (float)height, 0.0f, 1.0f);
         vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
 
+        VkRect2D scissor = vks::initializers::rect2D(width, height, 0, 0);
         vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
 
-        // Draw a grid of spheres using varying material parameters
-        vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-        vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &uniformBuffers[currentBuffer].descriptorSet, 0, NULL);
+        vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.composition, 0, nullptr);
 
-        // Bind triangle vertex buffer (contains position and colors)
-        VkDeviceSize offsets[1]{ 0 };
-        vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &vertices.buffer, offsets);
-        // Bind triangle index buffer
-        vkCmdBindIndexBuffer(drawCmdBuffers[i], indices.buffer, 0, VK_INDEX_TYPE_UINT32);
-        // Draw indexed triangle
-        vkCmdDrawIndexed(drawCmdBuffers[i], indices.count, 1, 0, 0, 1);
+        // Final composition as full screen quad
+        // Note: Also used for debug display if debugDisplayTarget > 0
+        vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.deferred);
+        vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
+
         vkCmdEndRenderPass(drawCmdBuffers[i]);
+        
         VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
     }
 
@@ -1187,12 +1178,15 @@ void voko::render()
 {
     if (!prepared) 
     	return;
+    
     // process camera update event
 	// usually update uniform buffers
-    updateUniformBuffers();
+    // updateUniformBuffers();
+    
+    UpdateUniformBufferDeferred();
+    updateUniformBufferOffscreen();
 
     draw();
-
 }
 
 void voko::updateUniformBuffers()
@@ -1207,11 +1201,30 @@ void voko::updateUniformBuffers()
 void voko::draw()
 {
     prepareFrame();
-    VkPipelineStageFlags submitPipelineStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    submitInfo.pWaitDstStageMask = &submitPipelineStages;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &drawCmdBuffers[currentBuffer];
 
+    // Offscreen rendering
+
+    // Wait for swap chain presentation to finish
+    submitInfo.pWaitSemaphores = &semaphores.presentComplete;
+    // Signal ready with offscreen semaphore
+    submitInfo.pSignalSemaphores = &offscreenSemaphore;
+
+    // Submit work
+
+    // Shadow map pass
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &offScreenCmdBuffer;
+    VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
+
+    // Scene rendering
+
+    // Wait for offscreen semaphore
+    submitInfo.pWaitSemaphores = &offscreenSemaphore;
+    // Signal ready with render complete semaphore
+    submitInfo.pSignalSemaphores = &semaphores.renderComplete;
+
+    // Submit work
+    submitInfo.pCommandBuffers = &drawCmdBuffers[currentBuffer];
     VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
     submitFrame();
 
@@ -1226,6 +1239,16 @@ void voko::nextFrame()
     auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
     frameTimer = (float)tDiff / 1000.0f;
     camera.update(frameTimer);
+    
+    // Convert to clamped timer value
+    if (!paused)
+    {
+        timer += timerSpeed * frameTimer;
+        if (timer > 1.0)
+        {
+            timer -= 1.0f;
+        }
+    }
 }
 
 void voko::prepareFrame()
@@ -1463,6 +1486,22 @@ VkResult voko::createVMA()
 
     VkResult result = vmaCreateAllocator(&allocatorInfo, &allocator);
     return result;
+}
+
+VkPipelineShaderStageCreateInfo voko::loadShader(std::string fileName, VkShaderStageFlagBits stage)
+{
+    VkPipelineShaderStageCreateInfo shaderStage = {};
+    shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shaderStage.stage = stage;
+#if defined(VK_USE_PLATFORM_ANDROID_KHR)
+    shaderStage.module = vks::tools::loadShader(androidApp->activity->assetManager, fileName.c_str(), device);
+#else
+    shaderStage.module = vks::tools::loadShader(fileName.c_str(), device);
+#endif
+    shaderStage.pName = "main";
+    assert(shaderStage.module != VK_NULL_HANDLE);
+    shaderModules.push_back(shaderStage.module);
+    return shaderStage;
 }
 
 uint32_t voko::getQueueFamilyIndex(VkQueueFlags queueFlags) const
@@ -1972,7 +2011,238 @@ void voko::setupDescriptors()
 
 void voko::preparePipelines()
 {
-    
+    // Layout
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(
+        &descriptorSetLayout, 1);
+    VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout));
+
+    // Pipelines
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = vks::initializers::pipelineInputAssemblyStateCreateInfo(
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, 0, VK_FALSE);
+    VkPipelineRasterizationStateCreateInfo rasterizationState = vks::initializers::pipelineRasterizationStateCreateInfo(
+        VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, 0);
+    VkPipelineColorBlendAttachmentState blendAttachmentState =
+        vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE);
+    VkPipelineColorBlendStateCreateInfo colorBlendState = vks::initializers::pipelineColorBlendStateCreateInfo(
+        1, &blendAttachmentState);
+    VkPipelineDepthStencilStateCreateInfo depthStencilState = vks::initializers::pipelineDepthStencilStateCreateInfo(
+        VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS_OR_EQUAL);
+    VkPipelineViewportStateCreateInfo viewportState = vks::initializers::pipelineViewportStateCreateInfo(1, 1, 0);
+    VkPipelineMultisampleStateCreateInfo multisampleState = vks::initializers::pipelineMultisampleStateCreateInfo(
+        VK_SAMPLE_COUNT_1_BIT, 0);
+    std::vector<VkDynamicState> dynamicStateEnables = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamicState = vks::initializers::pipelineDynamicStateCreateInfo(
+        dynamicStateEnables);
+    std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages;
+
+
+    VkGraphicsPipelineCreateInfo pipelineCI = vks::initializers::pipelineCreateInfo(pipelineLayout, renderPass);
+    pipelineCI.pInputAssemblyState = &inputAssemblyState;
+    pipelineCI.pRasterizationState = &rasterizationState;
+    pipelineCI.pColorBlendState = &colorBlendState;
+    pipelineCI.pMultisampleState = &multisampleState;
+    pipelineCI.pViewportState = &viewportState;
+    pipelineCI.pDepthStencilState = &depthStencilState;
+    pipelineCI.pDynamicState = &dynamicState;
+    pipelineCI.stageCount = static_cast<uint32_t>(shaderStages.size());
+    pipelineCI.pStages = shaderStages.data();
+
+    // Final fullscreen composition pass pipeline
+    rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
+    shaderStages[0] = loadShader((getShaderBasePath() + "deferredshadows/deferred.vert.spv").c_str(),
+                                 VK_SHADER_STAGE_VERTEX_BIT);
+    shaderStages[1] = loadShader((getShaderBasePath() + "deferredshadows/deferred.frag.spv").c_str(),
+                                 VK_SHADER_STAGE_FRAGMENT_BIT);
+    // Empty vertex input state, vertices are generated by the vertex shader
+    VkPipelineVertexInputStateCreateInfo emptyInputState = vks::initializers::pipelineVertexInputStateCreateInfo();
+    pipelineCI.pVertexInputState = &emptyInputState;
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.deferred));
+
+    // Vertex input state from glTF model for pipeline rendering models
+    pipelineCI.pVertexInputState = vkglTF::Vertex::getPipelineVertexInputState({
+        vkglTF::VertexComponent::Position, vkglTF::VertexComponent::UV, vkglTF::VertexComponent::Color,
+        vkglTF::VertexComponent::Normal, vkglTF::VertexComponent::Tangent
+    });
+    rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
+
+    // Offscreen pipeline
+    // Separate render pass
+    pipelineCI.renderPass = deferredFrameBuffer->renderPass;
+
+    // Blend attachment states required for all color attachments
+    // This is important, as color write mask will otherwise be 0x0 and you
+    // won't see anything rendered to the attachment
+    std::array<VkPipelineColorBlendAttachmentState, 3> blendAttachmentStates =
+    {
+        vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE),
+        vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE),
+        vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE)
+    };
+    colorBlendState.attachmentCount = static_cast<uint32_t>(blendAttachmentStates.size());
+    colorBlendState.pAttachments = blendAttachmentStates.data();
+
+    shaderStages[0] = loadShader(getShaderBasePath() + "deferredshadows/mrt.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
+    shaderStages[1] = loadShader(getShaderBasePath() + "deferredshadows/mrt.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.offscreen));
+
+    // Shadow mapping pipeline
+    // The shadow mapping pipeline uses geometry shader instancing (invocations layout modifier) to output
+    // shadow maps for multiple lights sources into the different shadow map layers in one single render pass
+    std::array<VkPipelineShaderStageCreateInfo, 2> shadowStages;
+    shadowStages[0] = loadShader(getShaderBasePath() + "deferredshadows/shadow.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
+    shadowStages[1] = loadShader(getShaderBasePath() + "deferredshadows/shadow.geom.spv",
+                                 VK_SHADER_STAGE_GEOMETRY_BIT);
+
+    pipelineCI.pStages = shadowStages.data();
+    pipelineCI.stageCount = static_cast<uint32_t>(shadowStages.size());
+
+    // Shadow pass doesn't use any color attachments
+    colorBlendState.attachmentCount = 0;
+    colorBlendState.pAttachments = nullptr;
+    // Cull front faces
+    rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
+    depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    // Enable depth bias
+    rasterizationState.depthBiasEnable = VK_TRUE;
+    // Add depth bias to dynamic state, so we can change it at runtime
+    dynamicStateEnables.push_back(VK_DYNAMIC_STATE_DEPTH_BIAS);
+    dynamicState = vks::initializers::pipelineDynamicStateCreateInfo(dynamicStateEnables);
+    // Reset blend attachment state
+    pipelineCI.renderPass = shadowFrameBuffer->renderPass;
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.shadowpass));
+}
+
+void voko::buildDeferredCommandBuffer()
+{
+    if (offScreenCmdBuffer == VK_NULL_HANDLE) {
+			offScreenCmdBuffer = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, false);
+		}
+
+		// Create a semaphore used to synchronize offscreen rendering and usage
+		VkSemaphoreCreateInfo semaphoreCreateInfo = vks::initializers::semaphoreCreateInfo();
+		VK_CHECK_RESULT(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &offscreenSemaphore));
+
+		VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
+
+		VkRenderPassBeginInfo renderPassBeginInfo = vks::initializers::renderPassBeginInfo();
+		std::array<VkClearValue, 4> clearValues = {};
+		VkViewport viewport;
+		VkRect2D scissor;
+
+		// First pass: Shadow map generation
+		// -------------------------------------------------------------------------------------------------------
+
+		clearValues[0].depthStencil = { 1.0f, 0 };
+
+		renderPassBeginInfo.renderPass = shadowFrameBuffer->renderPass;
+		renderPassBeginInfo.framebuffer = shadowFrameBuffer->framebuffer;
+		renderPassBeginInfo.renderArea.extent.width = shadowFrameBuffer->width;
+		renderPassBeginInfo.renderArea.extent.height = shadowFrameBuffer->height;
+		renderPassBeginInfo.clearValueCount = 1;
+		renderPassBeginInfo.pClearValues = clearValues.data();
+
+		VK_CHECK_RESULT(vkBeginCommandBuffer(offScreenCmdBuffer, &cmdBufInfo));
+
+		viewport = vks::initializers::viewport((float)shadowFrameBuffer->width, (float)shadowFrameBuffer->height, 0.0f, 1.0f);
+		vkCmdSetViewport(offScreenCmdBuffer, 0, 1, &viewport);
+
+		scissor = vks::initializers::rect2D(shadowFrameBuffer->width, shadowFrameBuffer->height, 0, 0);
+		vkCmdSetScissor(offScreenCmdBuffer, 0, 1, &scissor);
+
+		// Set depth bias (aka "Polygon offset")
+		vkCmdSetDepthBias(
+			offScreenCmdBuffer,
+			depthBiasConstant,
+			0.0f,
+			depthBiasSlope);
+
+		vkCmdBeginRenderPass(offScreenCmdBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBindPipeline(offScreenCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.shadowpass);
+		renderScene(offScreenCmdBuffer, true);
+		vkCmdEndRenderPass(offScreenCmdBuffer);
+
+		// Second pass: Deferred calculations
+		// -------------------------------------------------------------------------------------------------------
+
+		// Clear values for all attachments written in the fragment shader
+		clearValues[0].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
+		clearValues[1].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
+		clearValues[2].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
+		clearValues[3].depthStencil = { 1.0f, 0 };
+
+		renderPassBeginInfo.renderPass = deferredFrameBuffer->renderPass;
+		renderPassBeginInfo.framebuffer = deferredFrameBuffer->framebuffer;
+		renderPassBeginInfo.renderArea.extent.width = deferredFrameBuffer->width;
+		renderPassBeginInfo.renderArea.extent.height = deferredFrameBuffer->height;
+		renderPassBeginInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+		renderPassBeginInfo.pClearValues = clearValues.data();
+
+		vkCmdBeginRenderPass(offScreenCmdBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+		viewport = vks::initializers::viewport((float)deferredFrameBuffer->width, (float)deferredFrameBuffer->height, 0.0f, 1.0f);
+		vkCmdSetViewport(offScreenCmdBuffer, 0, 1, &viewport);
+
+		scissor = vks::initializers::rect2D(deferredFrameBuffer->width, deferredFrameBuffer->height, 0, 0);
+		vkCmdSetScissor(offScreenCmdBuffer, 0, 1, &scissor);
+
+		vkCmdBindPipeline(offScreenCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.offscreen);
+		renderScene(offScreenCmdBuffer, false);
+		vkCmdEndRenderPass(offScreenCmdBuffer);
+
+		VK_CHECK_RESULT(vkEndCommandBuffer(offScreenCmdBuffer));
+}
+
+void voko::renderScene(VkCommandBuffer cmdBuffer, bool shadow)
+{
+    // Background
+    vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, shadow ? &descriptorSets.shadow : &descriptorSets.background, 0, NULL);
+    models.background.draw(cmdBuffer);
+
+    // Objects
+    vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, shadow ? &descriptorSets.shadow : &descriptorSets.model, 0, NULL);
+    models.model.bindBuffers(cmdBuffer);
+    vkCmdDrawIndexed(cmdBuffer, models.model.indices.count, 3, 0, 0, 0);
+}
+
+// Update deferred composition fragment shader light position and parameters uniform block
+
+void voko::UpdateUniformBufferDeferred()
+{
+    // Animate
+    uniformDataComposition.lights[0].position.x = -14.0f + std::abs(sin(glm::radians(timer * 360.0f)) * 20.0f);
+    uniformDataComposition.lights[0].position.z = 15.0f + cos(glm::radians(timer *360.0f)) * 1.0f;
+
+    uniformDataComposition.lights[1].position.x = 14.0f - std::abs(sin(glm::radians(timer * 360.0f)) * 2.5f);
+    uniformDataComposition.lights[1].position.z = 13.0f + cos(glm::radians(timer *360.0f)) * 4.0f;
+
+    uniformDataComposition.lights[2].position.x = 0.0f + sin(glm::radians(timer *360.0f)) * 4.0f;
+    uniformDataComposition.lights[2].position.z = 4.0f + cos(glm::radians(timer *360.0f)) * 2.0f;
+
+    for (uint32_t i = 0; i < LIGHT_COUNT; i++) {
+        // mvp from light's pov (for shadows)
+        glm::mat4 shadowProj = glm::perspective(glm::radians(lightFOV), 1.0f, zNear, zFar);
+        glm::mat4 shadowView = glm::lookAt(glm::vec3(uniformDataComposition.lights[i].position), glm::vec3(uniformDataComposition.lights[i].target), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 shadowModel = glm::mat4(1.0f);
+
+        uniformDataShadows.mvp[i] = shadowProj * shadowView * shadowModel;
+        uniformDataComposition.lights[i].viewMatrix = uniformDataShadows.mvp[i];
+    }
+
+    memcpy(uniformDataShadows.instancePos, uniformDataOffscreen.instancePos, sizeof(UniformDataOffscreen::instancePos));
+    memcpy(shadowGeometryShaderUB.mapped, &uniformDataShadows, sizeof(UniformDataShadows));
+
+    uniformDataComposition.viewPos = glm::vec4(camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);;
+    uniformDataComposition.debugDisplayTarget = debugDisplayTarget;
+
+    memcpy(compositionUB.mapped, &uniformDataComposition, sizeof(uniformDataComposition));
+}
+
+void voko::updateUniformBufferOffscreen()
+{
+    uniformDataOffscreen.projection = camera.matrices.perspective;
+    uniformDataOffscreen.view = camera.matrices.view;
+    uniformDataOffscreen.model = glm::mat4(1.0f);
+    memcpy(offscreenUB.mapped, &uniformDataOffscreen, sizeof(uniformDataOffscreen));
 }
 
 voko::~voko()

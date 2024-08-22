@@ -1,6 +1,7 @@
 #pragma once
 
 // vk
+#include <cassert>
 #include <vulkan/vulkan.h>
 // std
 #include <string>
@@ -8,7 +9,6 @@
 #include <array>
 #include <iostream>
 #include <memory>
-#include <cassert>
 #include <chrono>
 #include <fstream>
 
@@ -258,6 +258,16 @@ public:
         VkDescriptorSet shadow{ VK_NULL_HANDLE };
         VkDescriptorSet composition{ VK_NULL_HANDLE };
     } descriptorSets;
+
+    struct {
+        VkPipeline deferred{ VK_NULL_HANDLE };
+        VkPipeline offscreen{ VK_NULL_HANDLE };
+        VkPipeline shadowpass{ VK_NULL_HANDLE };
+    } pipelines;
+
+    VkCommandBuffer offScreenCmdBuffer{ VK_NULL_HANDLE };
+    // Semaphore used to synchronize between offscreen and final scene rendering
+    VkSemaphore offscreenSemaphore{ VK_NULL_HANDLE };
     
     void loadAssets();
     void deferredSetup();
@@ -267,9 +277,13 @@ public:
     void prepareUniformBuffers();
     void setupDescriptors();
     void preparePipelines();
-    void buildDeferredCommandBuffers();
+    void buildDeferredCommandBuffer();
+    void renderScene(VkCommandBuffer cmdBuffer, bool shadow);
+    void UpdateUniformBufferDeferred();
+    void updateUniformBufferOffscreen();
 
 
+    /* Initialization funcs & vars*/
 	void init();
     void initSDL();
     VkExtent2D windowExtent;
@@ -288,6 +302,13 @@ public:
     /** @brief Last frame time measured using a high performance timer (if available) */
     float frameTimer = 1.0f;
 
+    // Defines a frame rate independent timer value clamped from -1.0...1.0
+    // For use in animations, rotations, etc.
+    float timer = 0.0f;
+    // Multiplier for speeding up (or slowing down) the global timer
+    float timerSpeed = 0.25f;
+    bool paused = false;
+    
     Camera camera;
     glm::vec2 mousePos;
 
@@ -328,6 +349,7 @@ public:
     VkResult createPhysicalDevice();
 
 
+    
     uint32_t getQueueFamilyIndex(VkQueueFlags queueFlags)const;
     VkResult createDeviceAndQueueAndCommandPool(VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char*> enabledExtensions, void* pNextChain, bool useSwapChain = true, VkQueueFlags requestedQueueTypes = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 
@@ -372,6 +394,10 @@ public:
     VmaAllocator allocator;
     VkResult createVMA();
 
+
+    /** @brief Loads a SPIR-V shader file for the given shader stage */
+    VkPipelineShaderStageCreateInfo loadShader(std::string fileName, VkShaderStageFlagBits stage);
+    
 protected:
 
     

@@ -12,7 +12,7 @@
 #include <chrono>
 #include <fstream>
 
-// self defined
+// self defined cores
 #include "debug.h"
 #include "camera.hpp"
 #include "VulkanTools.h"
@@ -21,13 +21,16 @@
 #include "VulkanTexture.h"
 #include "VulkanFrameBuffer.hpp"
 
+// self defined scene graph
+#include "SceneGraph/Scene.h"
+
 
 // 3rdparty
 #include <vk_mem_alloc.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
-#include "SceneGraph/Scene.h"
+
 
 
 // Macro to check and display Vulkan return results
@@ -187,9 +190,11 @@ public:
 
 
     // Scene Management
-    std::unique_ptr<Scene> Scene;
-    void LoadScene();
-    
+    std::unique_ptr<Scene> CurrentScene;
+    void loadScene();
+    void prepareSceneUniformBuffer();
+    void prepareLightUniformBuffer();
+    void prepareViewUniformBuffer();
     // Deferred Shadow Vars & Funcs
     int32_t debugDisplayTarget = 0;
     bool enableShadows = true;
@@ -223,35 +228,53 @@ public:
     vks::Framebuffer *deferredFrameBuffer;
     vks::Framebuffer *shadowFrameBuffer;
 
-    struct Light {
+
+
+    // struct UniformDataComposition {
+    //     glm::vec4 viewPos;
+    //     Light lights[LIGHT_COUNT];
+    //     uint32_t useShadows = 1;
+    //     int32_t debugDisplayTarget = 0;
+    // } uniformDataComposition;
+
+    // struct UniformDataOffscreen {
+    //     glm::mat4 projection;
+    //     glm::mat4 model;
+    //     glm::mat4 view;
+    //     glm::vec4 instancePos[3];
+    //     int layer{ 0 };
+    // } uniformDataOffscreen;
+
+    // This UBO stores the shadow matrices for all of the light sources
+    // The matrices are indexed using geometry shader instancing
+    // The instancePos is used to place the models using instanced draws
+    // struct UniformDataShadows{
+    //     glm::mat4 mvp[LIGHT_COUNT];
+    //     glm::vec4 instancePos[3];
+    // } uniformDataShadows;
+    
+    struct UniformBufferView
+    {
+        glm::mat4 projection;
+        glm::mat4 model;
+        glm::mat4 view;
+        glm::mat4 viewPos;
+    }uniformBufferView;
+    
+    struct SpotLight {
         glm::vec4 position;
         glm::vec4 target;
         glm::vec4 color;
         glm::mat4 viewMatrix;
     };
-
-    struct UniformDataComposition {
-        glm::vec4 viewPos;
-        Light lights[LIGHT_COUNT];
-        uint32_t useShadows = 1;
-        int32_t debugDisplayTarget = 0;
-    } uniformDataComposition;
     
-    struct UniformDataOffscreen {
-        glm::mat4 projection;
-        glm::mat4 model;
-        glm::mat4 view;
-        glm::vec4 instancePos[3];
-        int layer{ 0 };
-    } uniformDataOffscreen;
-
-    // This UBO stores the shadow matrices for all of the light sources
-    // The matrices are indexed using geometry shader instancing
-    // The instancePos is used to place the models using instanced draws
-    struct UniformDataShadows{
-        glm::mat4 mvp[LIGHT_COUNT];
-        glm::vec4 instancePos[3];
-    } uniformDataShadows;
+    struct UniformBufferLight
+    {
+        SpotLight lights[LIGHT_COUNT];
+    }uniformBufferLight;
+    
+    vks::Buffer UB_Light;
+    vks::Buffer UB_View;
 
     vks::Buffer offscreenUB;
     vks::Buffer compositionUB;
@@ -277,8 +300,8 @@ public:
     void loadAssets();
     void deferredSetup();
     void shadowSetup();
-    Light initLight(glm::vec3 pos, glm::vec3 target, glm::vec3 color);
-    void initLights();
+    // Light initLight(glm::vec3 pos, glm::vec3 target, glm::vec3 color);
+    // void initLights();
     void prepareUniformBuffers();
     void setupDescriptors();
     void preparePipelines();

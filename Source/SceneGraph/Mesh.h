@@ -21,9 +21,14 @@ public:
 
     Node *get_node();
 
-    vkglTF::Model Model;
-    vks::Texture2D colorMap;
-    vks::Texture2D NormalMap;
+    vkglTF::Model VkGltfModel;
+    struct
+    {
+        vks::Texture2D ColorMap;
+        vks::Texture2D NormalMap;
+    }Textures;
+
+    
 private:
     Node* node;
 };

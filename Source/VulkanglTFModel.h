@@ -25,9 +25,12 @@
 
 #include <ktx.h>
 #include <ktxvulkan.h>
-
+#ifndef GLM_FORCE_RADIANS
 #define GLM_FORCE_RADIANS
+#endif
+#ifndef GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#endif
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -209,8 +212,8 @@ namespace vkglTF
 		std::string name;
 		std::vector<AnimationSampler> samplers;
 		std::vector<AnimationChannel> channels;
-		float start = std::numeric_limits<float>::max();
-		float end = std::numeric_limits<float>::min();
+		float start = (std::numeric_limits<float>::max)();
+		float end = (std::numeric_limits<float>::min)();
 	};
 
 	/*

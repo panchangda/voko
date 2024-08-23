@@ -1,4 +1,6 @@
+#pragma once
 
+#include <string>
 
 enum RenderPassType
 {
@@ -7,8 +9,19 @@ enum RenderPassType
 };
 class RenderPass
 {
-    RenderPassType PassType = Mesh;
+public:
     RenderPass();
-
     virtual ~RenderPass();
+    
+    RenderPass(const std::string& name):passName(name){}
+    std::string get_name(){return passName;}
+    
+    RenderPassType PassType = Mesh;
+    
+    virtual void setupFrameBuffer();
+    virtual void setupDescriptors();
+    virtual void buildCommandBuffer();
+
+private:
+    std::string passName;
 };

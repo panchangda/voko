@@ -6,6 +6,8 @@
 
 
 #include "VulkanglTFModel.h"
+#include "SceneGraph/Light.h"
+#include "SceneGraph/Mesh.h"
 
 void voko::init()
 {
@@ -52,15 +54,15 @@ void voko::prepare()
 
 
     // Deferred Shadow Funcs
-    loadAssets();
-    deferredSetup();
-    shadowSetup();
-    initLights();
-    prepareUniformBuffers();
-    setupDescriptors();
-    preparePipelines();
-    buildCommandBuffers();
-    buildDeferredCommandBuffer();
+    // loadAssets();
+    // deferredSetup();
+    // shadowSetup();
+    // initLights();
+    // prepareUniformBuffers();
+    // setupDescriptors();
+    // preparePipelines();
+    // buildCommandBuffers();
+    // buildDeferredCommandBuffer();
     prepared = true;
     
 }
@@ -1171,12 +1173,108 @@ void voko::createPipelines()
     vkDestroyShaderModule(device, shaderStages[1].module, nullptr);
 }
 
-void voko::LoadScene()
+
+
+void voko::loadScene()
 {
-    // Scene = std::make_unique<Scene>("ExampleScene");
+    CurrentScene = std::make_unique<Scene>("DefaultScene");
+    const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::PreMultiplyVertexColors | vkglTF::FileLoadingFlags::FlipY;
+
+    // Meshes: model + texture
+    std::unique_ptr<Node> ArmorKnightMeshNode;
+    std::unique_ptr<Mesh> ArmorKnight = std::make_unique<Mesh>("ArmorKnight");
+    ArmorKnight->VkGltfModel.loadFromFile(getAssetPath() + "models/armor/armor.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    ArmorKnight->Textures.ColorMap.loadFromFile(getAssetPath() + "models/armor/colormap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    ArmorKnight->Textures.NormalMap.loadFromFile(getAssetPath() + "models/armor/normalmap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    ArmorKnight->set_node(*ArmorKnightMeshNode);
+
+    std::unique_ptr<Node> StoneFloor02Node;
+    std::unique_ptr<Mesh> StoneFloor02 = std::make_unique<Mesh>("StoneFloor02");
+    StoneFloor02->VkGltfModel.loadFromFile(getAssetPath() + "models/deferred_box.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    StoneFloor02->Textures.ColorMap.loadFromFile(getAssetPath() + "textures/stonefloor02_color_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    StoneFloor02->Textures.NormalMap.loadFromFile(getAssetPath() + "textures/stonefloor02_normal_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    StoneFloor02->set_node(*StoneFloor02Node);
+    
+    // components are collected & managed independently, now collected by scene
+    CurrentScene->add_component(std::move(ArmorKnight));
+    CurrentScene->add_component(std::move(StoneFloor02));
+    CurrentScene->add_node(std::move(ArmorKnightMeshNode));
+    CurrentScene->add_node(std::move(StoneFloor02Node));
+    
+    // Lights
+    std::vector<glm::vec3>LightPos = {
+    glm::vec3(-14.0f, -0.5f, 15.0f),
+    glm::vec3(14.0f, -4.0f, 12.0f),
+    glm::vec3(0.0f, -10.0f, 4.0f)};
+    std::vector<LightProperties> LightProperties = {
+        {
+            .direction = glm::vec3(-2.0f, 0.0f, 0.0f),
+            .color = glm::vec3(1.0f, 0.5f, 0.5f)
+        },
+        {
+            .direction = glm::vec3(2.0f, 0.0f, 0.0f),
+            .color = glm::vec3(0.0f, 0.0f, 1.0f)
+        },
+        {
+            .direction = glm::vec3(0.0f, 0.0f, 0.0f),
+            .color = glm::vec3(1.0f, 1.0f, 1.0f)
+        },
+    };
+    
+    for(size_t i = 0; i < LightPos.size();i++)
+    {
+        std::unique_ptr<Light> SpotLight;
+        std::unique_ptr<Node> OwnerNode;
+        
+        Transform& TF = dynamic_cast<Transform&>(OwnerNode->get_component(typeid(Transform)));
+        TF.set_translation(LightPos[i]);
+
+        SpotLight->set_node(*OwnerNode);
+        SpotLight->set_properties(LightProperties[i]);
+        SpotLight->set_light_type(Spot);
+        
+        CurrentScene->add_node(std::move(OwnerNode));
+        CurrentScene->add_component(std::move(SpotLight));
+    }
+}
+
+void voko::prepareSceneUniformBuffer()
+{
+    prepareLightUniformBuffer();
+    prepareViewUniformBuffer();
+}
+
+void voko::prepareLightUniformBuffer()
+{
+    // // Offscreen vertex shader
+    // VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    //     &offscreenUB, sizeof(UniformDataOffscreen)));
+    //
+    // // Deferred fragment shader
+    // VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    //     &compositionUB, sizeof(UniformDataComposition)));
+    //
+    // // Shadow map vertex shader (matrices from shadow's pov)
+    // VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    //     &shadowGeometryShaderUB, sizeof(UniformDataShadows)));
+    //
+    // // Map persistent
+    // VK_CHECK_RESULT(offscreenUB.map());
+    // VK_CHECK_RESULT(compositionUB.map());
+    // VK_CHECK_RESULT(shadowGeometryShaderUB.map());
+    //
+    // // Setup instanced model positions
+    // uniformDataOffscreen.instancePos[0] = glm::vec4(0.0f);
+    // uniformDataOffscreen.instancePos[1] = glm::vec4(-7.0f, 0.0, -4.0f, 0.0f);
+    // uniformDataOffscreen.instancePos[2] = glm::vec4(4.0f, 0.0, -6.0f, 0.0f);
+
     
 }
 
+void voko::prepareViewUniformBuffer()
+{
+    
+}
 
 void voko::render()
 {
@@ -1187,8 +1285,8 @@ void voko::render()
 	// usually update uniform buffers
     // updateUniformBuffers();
     
-    UpdateUniformBufferDeferred();
-    updateUniformBufferOffscreen();
+    // UpdateUniformBufferDeferred();
+    // updateUniformBufferOffscreen();
 
     draw();
 }
@@ -1865,45 +1963,45 @@ void voko::shadowSetup()
     // Create default renderpass for the framebuffer
     VK_CHECK_RESULT(shadowFrameBuffer->createRenderPass());
 }
-voko::Light voko::initLight(glm::vec3 pos, glm::vec3 target, glm::vec3 color)
-{
-    Light light;
-    light.position = glm::vec4(pos, 1.0f);
-    light.target = glm::vec4(target, 0.0f);
-    light.color = glm::vec4(color, 0.0f);
-    return light;
-}
-void voko::initLights()
-{
-    uniformDataComposition.lights[0] = initLight(glm::vec3(-14.0f, -0.5f, 15.0f), glm::vec3(-2.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.5f, 0.5f));
-    uniformDataComposition.lights[1] = initLight(glm::vec3(14.0f, -4.0f, 12.0f), glm::vec3(2.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    uniformDataComposition.lights[2] = initLight(glm::vec3(0.0f, -10.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f));
-}
+// voko::Light voko::initLight(glm::vec3 pos, glm::vec3 target, glm::vec3 color)
+// {
+//     Light light;
+//     light.position = glm::vec4(pos, 1.0f);
+//     light.target = glm::vec4(target, 0.0f);
+//     light.color = glm::vec4(color, 0.0f);
+//     return light;
+// }
+// void voko::initLights()
+// {
+//     uniformDataComposition.lights[0] = initLight(glm::vec3(-14.0f, -0.5f, 15.0f), glm::vec3(-2.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.5f, 0.5f));
+//     uniformDataComposition.lights[1] = initLight(glm::vec3(14.0f, -4.0f, 12.0f), glm::vec3(2.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+//     uniformDataComposition.lights[2] = initLight(glm::vec3(0.0f, -10.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f));
+// }
 
-void voko::prepareUniformBuffers()
-{
-    // Offscreen vertex shader
-    VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &offscreenUB, sizeof(UniformDataOffscreen)));
-
-    // Deferred fragment shader
-    VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &compositionUB, sizeof(UniformDataComposition)));
-
-    // Shadow map vertex shader (matrices from shadow's pov)
-    VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &shadowGeometryShaderUB, sizeof(UniformDataShadows)));
-
-    // Map persistent
-    VK_CHECK_RESULT(offscreenUB.map());
-    VK_CHECK_RESULT(compositionUB.map());
-    VK_CHECK_RESULT(shadowGeometryShaderUB.map());
-
-    // Setup instanced model positions
-    uniformDataOffscreen.instancePos[0] = glm::vec4(0.0f);
-    uniformDataOffscreen.instancePos[1] = glm::vec4(-7.0f, 0.0, -4.0f, 0.0f);
-    uniformDataOffscreen.instancePos[2] = glm::vec4(4.0f, 0.0, -6.0f, 0.0f);
-}
+// void voko::prepareUniformBuffers()
+// {
+//     // Offscreen vertex shader
+//     VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+//         &offscreenUB, sizeof(UniformDataOffscreen)));
+//
+//     // Deferred fragment shader
+//     VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+//         &compositionUB, sizeof(UniformDataComposition)));
+//
+//     // Shadow map vertex shader (matrices from shadow's pov)
+//     VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+//         &shadowGeometryShaderUB, sizeof(UniformDataShadows)));
+//
+//     // Map persistent
+//     VK_CHECK_RESULT(offscreenUB.map());
+//     VK_CHECK_RESULT(compositionUB.map());
+//     VK_CHECK_RESULT(shadowGeometryShaderUB.map());
+//
+//     // Setup instanced model positions
+//     uniformDataOffscreen.instancePos[0] = glm::vec4(0.0f);
+//     uniformDataOffscreen.instancePos[1] = glm::vec4(-7.0f, 0.0, -4.0f, 0.0f);
+//     uniformDataOffscreen.instancePos[2] = glm::vec4(4.0f, 0.0, -6.0f, 0.0f);
+// }
 
 void voko::setupDescriptors()
 {
@@ -2038,8 +2136,7 @@ void voko::preparePipelines()
     VkPipelineDynamicStateCreateInfo dynamicState = vks::initializers::pipelineDynamicStateCreateInfo(
         dynamicStateEnables);
     std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages;
-
-
+    
     VkGraphicsPipelineCreateInfo pipelineCI = vks::initializers::pipelineCreateInfo(pipelineLayout, renderPass);
     pipelineCI.pInputAssemblyState = &inputAssemblyState;
     pipelineCI.pRasterizationState = &rasterizationState;
@@ -2210,44 +2307,44 @@ void voko::renderScene(VkCommandBuffer cmdBuffer, bool shadow)
 
 // Update deferred composition fragment shader light position and parameters uniform block
 
-void voko::UpdateUniformBufferDeferred()
-{
-    // Animate
-    uniformDataComposition.lights[0].position.x = -14.0f + std::abs(sin(glm::radians(timer * 360.0f)) * 20.0f);
-    uniformDataComposition.lights[0].position.z = 15.0f + cos(glm::radians(timer *360.0f)) * 1.0f;
-
-    uniformDataComposition.lights[1].position.x = 14.0f - std::abs(sin(glm::radians(timer * 360.0f)) * 2.5f);
-    uniformDataComposition.lights[1].position.z = 13.0f + cos(glm::radians(timer *360.0f)) * 4.0f;
-
-    uniformDataComposition.lights[2].position.x = 0.0f + sin(glm::radians(timer *360.0f)) * 4.0f;
-    uniformDataComposition.lights[2].position.z = 4.0f + cos(glm::radians(timer *360.0f)) * 2.0f;
-
-    for (uint32_t i = 0; i < LIGHT_COUNT; i++) {
-        // mvp from light's pov (for shadows)
-        glm::mat4 shadowProj = glm::perspective(glm::radians(lightFOV), 1.0f, zNear, zFar);
-        glm::mat4 shadowView = glm::lookAt(glm::vec3(uniformDataComposition.lights[i].position), glm::vec3(uniformDataComposition.lights[i].target), glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 shadowModel = glm::mat4(1.0f);
-
-        uniformDataShadows.mvp[i] = shadowProj * shadowView * shadowModel;
-        uniformDataComposition.lights[i].viewMatrix = uniformDataShadows.mvp[i];
-    }
-
-    memcpy(uniformDataShadows.instancePos, uniformDataOffscreen.instancePos, sizeof(UniformDataOffscreen::instancePos));
-    memcpy(shadowGeometryShaderUB.mapped, &uniformDataShadows, sizeof(UniformDataShadows));
-
-    uniformDataComposition.viewPos = glm::vec4(camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);;
-    uniformDataComposition.debugDisplayTarget = debugDisplayTarget;
-
-    memcpy(compositionUB.mapped, &uniformDataComposition, sizeof(uniformDataComposition));
-}
-
-void voko::updateUniformBufferOffscreen()
-{
-    uniformDataOffscreen.projection = camera.matrices.perspective;
-    uniformDataOffscreen.view = camera.matrices.view;
-    uniformDataOffscreen.model = glm::mat4(1.0f);
-    memcpy(offscreenUB.mapped, &uniformDataOffscreen, sizeof(uniformDataOffscreen));
-}
+// void voko::UpdateUniformBufferDeferred()
+// {
+//     // Animate
+//     uniformDataComposition.lights[0].position.x = -14.0f + std::abs(sin(glm::radians(timer * 360.0f)) * 20.0f);
+//     uniformDataComposition.lights[0].position.z = 15.0f + cos(glm::radians(timer *360.0f)) * 1.0f;
+//
+//     uniformDataComposition.lights[1].position.x = 14.0f - std::abs(sin(glm::radians(timer * 360.0f)) * 2.5f);
+//     uniformDataComposition.lights[1].position.z = 13.0f + cos(glm::radians(timer *360.0f)) * 4.0f;
+//
+//     uniformDataComposition.lights[2].position.x = 0.0f + sin(glm::radians(timer *360.0f)) * 4.0f;
+//     uniformDataComposition.lights[2].position.z = 4.0f + cos(glm::radians(timer *360.0f)) * 2.0f;
+//
+//     for (uint32_t i = 0; i < LIGHT_COUNT; i++) {
+//         // mvp from light's pov (for shadows)
+//         glm::mat4 shadowProj = glm::perspective(glm::radians(lightFOV), 1.0f, zNear, zFar);
+//         glm::mat4 shadowView = glm::lookAt(glm::vec3(uniformDataComposition.lights[i].position), glm::vec3(uniformDataComposition.lights[i].target), glm::vec3(0.0f, 1.0f, 0.0f));
+//         glm::mat4 shadowModel = glm::mat4(1.0f);
+//
+//         uniformDataShadows.mvp[i] = shadowProj * shadowView * shadowModel;
+//         uniformDataComposition.lights[i].viewMatrix = uniformDataShadows.mvp[i];
+//     }
+//
+//     memcpy(uniformDataShadows.instancePos, uniformDataOffscreen.instancePos, sizeof(UniformDataOffscreen::instancePos));
+//     memcpy(shadowGeometryShaderUB.mapped, &uniformDataShadows, sizeof(UniformDataShadows));
+//
+//     uniformDataComposition.viewPos = glm::vec4(camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);;
+//     uniformDataComposition.debugDisplayTarget = debugDisplayTarget;
+//
+//     memcpy(compositionUB.mapped, &uniformDataComposition, sizeof(uniformDataComposition));
+// }
+//
+// void voko::updateUniformBufferOffscreen()
+// {
+//     uniformDataOffscreen.projection = camera.matrices.perspective;
+//     uniformDataOffscreen.view = camera.matrices.view;
+//     uniformDataOffscreen.model = glm::mat4(1.0f);
+//     memcpy(offscreenUB.mapped, &uniformDataOffscreen, sizeof(uniformDataOffscreen));
+// }
 
 voko::~voko()
 {

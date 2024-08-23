@@ -8,7 +8,8 @@
 #include <unordered_map>
 #include <vector>
 
-class Node;
+#include "Node.h"
+
 class Component;
 class Mesh;
 

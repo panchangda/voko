@@ -1,8 +1,8 @@
 #include <queue>
 
+#include "Node.h"
 #include "Scene.h"
 #include "Component.h"
-#include "Node.h"
 #include "Mesh.h"
 
 Scene::Scene(const std::string &name) :

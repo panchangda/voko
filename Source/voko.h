@@ -70,9 +70,9 @@ typedef struct _SwapChainBuffers {
 // Default fence timeout in nanoseconds
 #define DEFAULT_FENCE_TIMEOUT 100000000000
 
-// Must match the LIGHT_COUNT define in the shadow and deferred shaders
-#define LIGHT_COUNT 3
 
+static constexpr int LIGHT_MAX = 3;
+static int LIGHT_COUNT = 3;
 
 class voko{
 public:
@@ -83,7 +83,7 @@ public:
     uint32_t frameCounter = 0;
     bool prepared = false;
     virtual void render();
-    void updateUniformBuffers();
+
     void nextFrame();
     void prepareFrame();
     void submitFrame();
@@ -179,7 +179,7 @@ public:
 
     
 
-    // Hellow Triangle Functions
+    // Hello world triangle functions, implemented in TriangleSample.cpp
     void createTriangleVertexBuffer();
 	void createVertexBuffer();
     void createUniformBuffers();
@@ -253,28 +253,6 @@ public:
     //     glm::vec4 instancePos[3];
     // } uniformDataShadows;
     
-    struct UniformBufferView
-    {
-        glm::mat4 projection;
-        glm::mat4 model;
-        glm::mat4 view;
-        glm::mat4 viewPos;
-    }uniformBufferView;
-    
-    struct SpotLight {
-        glm::vec4 position;
-        glm::vec4 target;
-        glm::vec4 color;
-        glm::mat4 viewMatrix;
-    };
-    
-    struct UniformBufferLight
-    {
-        SpotLight lights[LIGHT_COUNT];
-    }uniformBufferLight;
-    
-    vks::Buffer UB_Light;
-    vks::Buffer UB_View;
 
     vks::Buffer offscreenUB;
     vks::Buffer compositionUB;
@@ -425,7 +403,51 @@ public:
 
     /** @brief Loads a SPIR-V shader file for the given shader stage */
     VkPipelineShaderStageCreateInfo loadShader(std::string fileName, VkShaderStageFlagBits stage);
+
+
+    /** Descriptor management */
+    /** Lights */
+    struct SpotLight {
+        glm::vec4 position;
+        glm::vec4 target;
+        glm::vec4 color;
+        glm::mat4 mvpMatrix;
+    };
     
+    struct UniformBufferLight
+    {
+        SpotLight lights[LIGHT_MAX];
+    }uniformBufferLight;
+    
+    vks::Buffer lightUniformBuffer;
+    
+    VkDescriptorPool lightDesciptorPool;
+    VkDescriptorSetLayout lightDescriptorSetLayout;
+    VkDescriptorSet lightDescriptorSet;
+    void CreateLightUniformBuffer();
+    void CreateLightDescriptor();
+    void UpdateLightUniformBuffer();
+
+    /** Views */
+    struct UniformBufferView
+    {
+        glm::mat4 projectionMatrix;
+        glm::mat4 modelMatrix;
+        glm::mat4 viewMatrix;
+        glm::mat4 mvpMatrix;
+        glm::vec4 viewPos;
+    }uniformBufferView;
+    
+    vks::Buffer viewUniformBuffer;
+
+    VkDescriptorPool viewDesciptorPool;
+    VkDescriptorSetLayout viewDescriptorSetLayout;
+    VkDescriptorSet viewDescriptorSet;
+    void CreateViewDescriptor();
+    void CreateViewUniformBuffer();
+    void UpdateViewUniformBuffer();
+    
+
 protected:
 
     

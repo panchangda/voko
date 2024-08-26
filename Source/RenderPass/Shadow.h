@@ -6,11 +6,11 @@
 class ShadowPass : public RenderPass
 {
 public:
-    ShadowPass() = default;
-    ShadowPass(const std::string& name);
-    virtual void setupFrameBuffer() override;
+    ShadowPass(vks::VulkanDevice* inVulkanDevice) : RenderPass(inVulkanDevice){}
+    virtual void setupFrameBuffer(int width, int height) override;
     virtual void setupDescriptors() override;
+    virtual void preparePipeline() override;
     virtual void buildCommandBuffer() override;
-    
 };
+
 

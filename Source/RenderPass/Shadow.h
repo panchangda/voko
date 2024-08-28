@@ -8,9 +8,13 @@ class ShadowPass : public RenderPass
 public:
     ShadowPass(vks::VulkanDevice* inVulkanDevice) : RenderPass(inVulkanDevice){}
     virtual void setupFrameBuffer(int width, int height) override;
-    virtual void setupDescriptors() override;
     virtual void preparePipeline() override;
-    virtual void buildCommandBuffer() override;
+    virtual void buildCommandBuffer(const std::vector<Mesh *>& sceneMeshes) override;
+
+    // Properties
+    // Depth bias (and slope) are used to avoid shadowing artifacts
+    float depthBiasConstant = 1.25f;
+    float depthBiasSlope = 1.75f;
 };
 
 

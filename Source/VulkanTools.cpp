@@ -421,6 +421,21 @@ namespace vks
 				return VK_NULL_HANDLE;
 			}
 		}
+
+		VkPipelineShaderStageCreateInfo loadShader(std::string fileName, VkShaderStageFlagBits stage, VkDevice device)
+		{
+			VkPipelineShaderStageCreateInfo shaderStage = {};
+			shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			shaderStage.stage = stage;
+#if defined(VK_USE_PLATFORM_ANDROID_KHR)
+			shaderStage.module = vks::tools::loadShader(androidApp->activity->assetManager, fileName.c_str(), device);
+#else
+			shaderStage.module = vks::tools::loadShader(fileName.c_str(), device);
+#endif
+			shaderStage.pName = "main";
+			assert(shaderStage.module != VK_NULL_HANDLE);
+			return shaderStage;
+		}
 #endif
 
 		bool fileExists(const std::string &filename)

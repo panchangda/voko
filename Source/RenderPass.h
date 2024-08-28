@@ -5,13 +5,15 @@
 
 #include <vulkan/vulkan_core.h>
 
+#include "SceneGraph/Mesh.h"
+
 namespace vks
 {
     struct Framebuffer;
     class VulkanDevice;
 }
 
-enum RenderPassType
+enum class RenderPassType
 {
     Mesh = 0x01,
     FullScreen = 0x02,
@@ -31,7 +33,8 @@ public:
     virtual void setupFrameBuffer(int width, int height) = 0;
     virtual void setupPipelineLayouts() = 0;
     virtual void preparePipeline() = 0;
-    virtual void buildCommandBuffer() = 0;
+    virtual void setDescriptorSetLayouts(std::vector<VkDescriptorSetLayout>& InLayouts);
+    virtual void buildCommandBuffer(const std::vector<Mesh *>& sceneMeshes) = 0;
     virtual vks::Framebuffer* getFrameBuffer(){return frameBuffer;}
 
     
@@ -39,6 +42,19 @@ public:
     vks::VulkanDevice* vulkanDevice;
     vks::Framebuffer *frameBuffer;
     std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
+    VkPipelineLayout pipelineLayout;
+    
+    VkPipelineCache pipelineCache;
+    VkPipeline pipeline;
+
+    VkCommandBuffer cmdBuffer;
+
+    VkSemaphore passSemaphore;
 private:
     
 };
+
+inline void RenderPass::setDescriptorSetLayouts(std::vector<VkDescriptorSetLayout>& InLayouts)
+{
+    descriptorSetLayouts = InLayouts;
+}

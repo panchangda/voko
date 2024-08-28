@@ -28,6 +28,7 @@ public:
         vks::Texture2D NormalMap;
     }Textures;
 
+    void draw_mesh();
     
 private:
     Node* node;

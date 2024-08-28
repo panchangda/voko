@@ -192,6 +192,8 @@ public:
     // Scene Management
     std::unique_ptr<Scene> CurrentScene;
     void loadScene();
+    void collectMeshes();
+    std::vector<Mesh*> SceneMeshes;
     void prepareSceneUniformBuffer();
     void prepareLightUniformBuffer();
     void prepareViewUniformBuffer();
@@ -205,9 +207,7 @@ public:
     float zFar = 64.0f;
     float lightFOV = 100.0f;
 
-    // Depth bias (and slope) are used to avoid shadowing artifacts
-    float depthBiasConstant = 1.25f;
-    float depthBiasSlope = 1.75f;
+
     
     struct {
         struct {

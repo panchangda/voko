@@ -127,8 +127,12 @@ namespace vks
 		VkShaderModule loadShader(AAssetManager* assetManager, const char *fileName, VkDevice device);
 #else
 		VkShaderModule loadShader(const char *fileName, VkDevice device);
+		
 #endif
 
+		// 
+		VkPipelineShaderStageCreateInfo loadShader(std::string fileName, VkShaderStageFlagBits stage, VkDevice device);
+		
 		/** @brief Checks if a file exists */
 		bool fileExists(const std::string &filename);
 

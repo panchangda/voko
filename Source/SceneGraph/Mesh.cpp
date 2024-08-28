@@ -17,3 +17,8 @@ Node *Mesh::get_node()
 {
     return node;
 }
+
+void Mesh::draw_mesh()
+{
+    
+}

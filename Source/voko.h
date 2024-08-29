@@ -30,7 +30,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
-
+#include "SceneRenderer.h"
 
 
 // Macro to check and display Vulkan return results
@@ -200,7 +200,11 @@ public:
     // Deferred Shadow Vars & Funcs
     int32_t debugDisplayTarget = 0;
     bool enableShadows = true;
+    
 
+    // Scene Renderers
+    SceneRenderer* SceneRenderer;
+    
     // Keep depth range as small as possible
     // for better shadow map precision
     float zNear = 0.1f;
@@ -353,8 +357,6 @@ public:
         return (std::find(supportedDeviceExtensions.begin(), supportedDeviceExtensions.end(), extension) != supportedDeviceExtensions.end());
     }
     VkResult createPhysicalDevice();
-
-
     
     uint32_t getQueueFamilyIndex(VkQueueFlags queueFlags)const;
     VkResult createDeviceAndQueueAndCommandPool(VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char*> enabledExtensions, void* pNextChain, bool useSwapChain = true, VkQueueFlags requestedQueueTypes = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
@@ -432,10 +434,9 @@ public:
     struct UniformBufferView
     {
         glm::mat4 projectionMatrix;
-        glm::mat4 modelMatrix;
         glm::mat4 viewMatrix;
         glm::mat4 mvpMatrix;
-        glm::vec4 viewPos;
+        glm::vec4 cameraPos;
     }uniformBufferView;
     
     vks::Buffer viewUniformBuffer;

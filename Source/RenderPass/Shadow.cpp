@@ -7,6 +7,10 @@
 // Declared in voko.h
 extern int LIGHT_COUNT;
 
+ShadowPass::ShadowPass(vks::VulkanDevice* inVulkanDevice):RenderPass(inVulkanDevice)
+{
+}
+
 void ShadowPass::setupFrameBuffer(int width, int height)
 {
     frameBuffer = new vks::Framebuffer(vulkanDevice);

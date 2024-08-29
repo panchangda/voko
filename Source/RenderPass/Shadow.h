@@ -6,7 +6,7 @@
 class ShadowPass : public RenderPass
 {
 public:
-    ShadowPass(vks::VulkanDevice* inVulkanDevice) : RenderPass(inVulkanDevice){}
+    ShadowPass(vks::VulkanDevice* inVulkanDevice);
     virtual void setupFrameBuffer(int width, int height) override;
     virtual void preparePipeline() override;
     virtual void buildCommandBuffer(const std::vector<Mesh *>& sceneMeshes) override;

@@ -253,7 +253,7 @@ void voko::createUniformBuffers()
         allocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
             VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-        VkBuffer buf;
+        // VkBuffer buf;
         VmaAllocation alloc;
         VmaAllocationInfo allocInfo;
         vmaCreateBuffer(allocator, &bufferCreateInfo, &allocCreateInfo, &uniformBuffers[i].buffer, &alloc, &allocInfo);

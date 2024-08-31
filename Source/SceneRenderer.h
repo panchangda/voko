@@ -5,7 +5,7 @@
 class SceneRenderer
 {
 public:
-    SceneRenderer() = default;virtual
+    SceneRenderer() = default;
     ~SceneRenderer() = default;
     
     virtual void Render();

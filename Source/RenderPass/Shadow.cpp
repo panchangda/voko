@@ -1,4 +1,4 @@
-#include "Shadow.h"
+      #include "Shadow.h"
 
 #include <array>
 
@@ -55,7 +55,7 @@ void ShadowPass::preparePipeline()
 {
     // Layout
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(
-        descriptorSetLayouts.data(), descriptorSetLayouts.size());
+        descriptorSetLayouts.data(), static_cast<uint32_t>(descriptorSetLayouts.size()) );
     VK_CHECK_RESULT(vkCreatePipelineLayout(vulkanDevice->logicalDevice, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout));
 
     // Pipelines
@@ -178,5 +178,10 @@ void ShadowPass::buildCommandBuffer(const std::vector<Mesh *>& sceneMeshes)
     vkCmdEndRenderPass(cmdBuffer);
 
     VK_CHECK_RESULT(vkEndCommandBuffer(cmdBuffer));
+}
+
+ShadowPass::~ShadowPass()
+{
+    
 }
 

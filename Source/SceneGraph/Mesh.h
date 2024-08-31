@@ -1,6 +1,6 @@
-#include <memory>
+#pragma once
+
 #include <string>
-#include <typeinfo>
 #include <vector>
 
 #include "Component.h"

@@ -10,7 +10,7 @@
 namespace vks
 {
     struct Framebuffer;
-    class VulkanDevice;
+    struct VulkanDevice;
 }
 
 enum class RenderPassType
@@ -23,7 +23,7 @@ class RenderPass
 public:
     RenderPass() = delete;
     explicit RenderPass(vks::VulkanDevice* inVulkanDevice) : vulkanDevice(inVulkanDevice){}
-    virtual ~RenderPass();
+    virtual ~RenderPass() = default;
     
     RenderPass(const std::string& name):passName(name){}
     std::string get_name(){return passName;}
@@ -31,12 +31,13 @@ public:
     RenderPassType PassType;
     
     virtual void setupFrameBuffer(int width, int height) = 0;
-    virtual void setupPipelineLayouts() = 0;
     virtual void preparePipeline() = 0;
-    virtual void setDescriptorSetLayouts(std::vector<VkDescriptorSetLayout>& InLayouts);
+    
     virtual void buildCommandBuffer(const std::vector<Mesh *>& sceneMeshes) = 0;
-    virtual vks::Framebuffer* getFrameBuffer(){return frameBuffer;}
 
+    // getter setters:
+    virtual vks::Framebuffer* getFrameBuffer(){return frameBuffer;}
+    virtual void setDescriptorSetLayouts(std::vector<VkDescriptorSetLayout>& InLayouts){descriptorSetLayouts = InLayouts;};
     
     std::string passName;
     vks::VulkanDevice* vulkanDevice;
@@ -54,7 +55,3 @@ private:
     
 };
 
-inline void RenderPass::setDescriptorSetLayouts(std::vector<VkDescriptorSetLayout>& InLayouts)
-{
-    descriptorSetLayouts = InLayouts;
-}

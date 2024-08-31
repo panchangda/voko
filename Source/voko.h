@@ -33,28 +33,6 @@
 #include "SceneRenderer.h"
 
 
-// Macro to check and display Vulkan return results
-#if defined(__ANDROID__)
-#define VK_CHECK_RESULT(f)																				\
-{																										\
-	VkResult res = (f);																					\
-	if (res != VK_SUCCESS)																				\
-	{																									\
-		LOGE("Fatal : VkResult is \" %s \" in %s at line %d", vks::tools::errorString(res).c_str(), __FILE__, __LINE__); \
-		assert(res == VK_SUCCESS);																		\
-	}																									\
-}
-#else
-#define VK_CHECK_RESULT(f)																				\
-{																										\
-	VkResult res = (f);																					\
-	if (res != VK_SUCCESS)																				\
-	{																									\
-		std::cout << "Fatal : VkResult is \"" << res << "\" in " << __FILE__ << " at line " << __LINE__ << "\n"; \
-		assert(res == VK_SUCCESS);																		\
-	}																									\
-}
-#endif
 
 
 typedef struct _SwapChainBuffers {
@@ -71,8 +49,12 @@ typedef struct _SwapChainBuffers {
 #define DEFAULT_FENCE_TIMEOUT 100000000000
 
 
-static constexpr int LIGHT_MAX = 3;
-static int LIGHT_COUNT = 3;
+
+// Global vars:
+constexpr int LIGHT_MAX = 3;
+inline int LIGHT_COUNT = 3;
+
+
 
 class voko{
 public:
@@ -195,8 +177,6 @@ public:
     void collectMeshes();
     std::vector<Mesh*> SceneMeshes;
     void prepareSceneUniformBuffer();
-    void prepareLightUniformBuffer();
-    void prepareViewUniformBuffer();
     // Deferred Shadow Vars & Funcs
     int32_t debugDisplayTarget = 0;
     bool enableShadows = true;
@@ -210,87 +190,7 @@ public:
     float zNear = 0.1f;
     float zFar = 64.0f;
     float lightFOV = 100.0f;
-
-
     
-    struct {
-        struct {
-            vks::Texture2D colorMap;
-            vks::Texture2D normalMap;
-        } model;
-        struct {
-            vks::Texture2D colorMap;
-            vks::Texture2D normalMap;
-        } background;
-    } textures;
-
-    struct {
-        vkglTF::Model model;
-        vkglTF::Model background;
-    } models;
-    
-    vks::Framebuffer *deferredFrameBuffer;
-    vks::Framebuffer *shadowFrameBuffer;
-
-
-
-    // struct UniformDataComposition {
-    //     glm::vec4 viewPos;
-    //     Light lights[LIGHT_COUNT];
-    //     uint32_t useShadows = 1;
-    //     int32_t debugDisplayTarget = 0;
-    // } uniformDataComposition;
-
-    // struct UniformDataOffscreen {
-    //     glm::mat4 projection;
-    //     glm::mat4 model;
-    //     glm::mat4 view;
-    //     glm::vec4 instancePos[3];
-    //     int layer{ 0 };
-    // } uniformDataOffscreen;
-
-    // This UBO stores the shadow matrices for all of the light sources
-    // The matrices are indexed using geometry shader instancing
-    // The instancePos is used to place the models using instanced draws
-    // struct UniformDataShadows{
-    //     glm::mat4 mvp[LIGHT_COUNT];
-    //     glm::vec4 instancePos[3];
-    // } uniformDataShadows;
-    
-
-    vks::Buffer offscreenUB;
-    vks::Buffer compositionUB;
-    vks::Buffer shadowGeometryShaderUB;
-
-    struct {
-        VkDescriptorSet model{ VK_NULL_HANDLE };
-        VkDescriptorSet background{ VK_NULL_HANDLE };
-        VkDescriptorSet shadow{ VK_NULL_HANDLE };
-        VkDescriptorSet composition{ VK_NULL_HANDLE };
-    } descriptorSets;
-
-    struct {
-        VkPipeline deferred{ VK_NULL_HANDLE };
-        VkPipeline offscreen{ VK_NULL_HANDLE };
-        VkPipeline shadowpass{ VK_NULL_HANDLE };
-    } pipelines;
-
-    VkCommandBuffer offScreenCmdBuffer{ VK_NULL_HANDLE };
-    // Semaphore used to synchronize between offscreen and final scene rendering
-    VkSemaphore offscreenSemaphore{ VK_NULL_HANDLE };
-    
-    void loadAssets();
-    void deferredSetup();
-    void shadowSetup();
-    // Light initLight(glm::vec3 pos, glm::vec3 target, glm::vec3 color);
-    // void initLights();
-    void prepareUniformBuffers();
-    void setupDescriptors();
-    void preparePipelines();
-    void buildDeferredCommandBuffer();
-    void renderScene(VkCommandBuffer cmdBuffer, bool shadow);
-    void UpdateUniformBufferDeferred();
-    void updateUniformBufferOffscreen();
 
 
     /* Initialization funcs & vars*/

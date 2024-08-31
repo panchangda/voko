@@ -1,12 +1,12 @@
 #pragma once
 #include <vector>
-#include <RenderPass.h>
+#include <RenderPass/RenderPass.h>
 
 class SceneRenderer
 {
 public:
     SceneRenderer() = default;
-    ~SceneRenderer() = default;
+    virtual ~SceneRenderer() = default;
     
     virtual void Render();
 };

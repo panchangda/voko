@@ -30,15 +30,9 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
-#include "SceneRenderer.h"
+#include "Renderer/SceneRenderer.h"
+#include "VulkanSwapChain.h"
 
-
-
-
-typedef struct _SwapChainBuffers {
-    VkImage image;
-    VkImageView view;
-} SwapChainBuffer;
 
 // We want to keep GPU and CPU busy. To do that we may start building a new command buffer while the previous one is still being executed
 // This number defines how many frames may be worked on simultaneously at once
@@ -53,7 +47,8 @@ typedef struct _SwapChainBuffers {
 // Global vars:
 constexpr int LIGHT_MAX = 3;
 inline int LIGHT_COUNT = 3;
-
+constexpr int MESH_MAX = 100;
+inline int MESH_COUNT = 0;
 
 
 class voko{
@@ -64,6 +59,10 @@ public:
     // Frame counter to display fps
     uint32_t frameCounter = 0;
     bool prepared = false;
+    
+    uint32_t width = 1280;
+    uint32_t height = 720;
+    void windowResize();
     virtual void render();
 
     void nextFrame();
@@ -75,9 +74,9 @@ public:
     void prepare();
     // Belows functions are prepare procedures
     // Only Test on Windows 
-    void initSurface();
+    void initSwapChain();
     void createCommandPool();
-    void createSwapchain();
+    void setupSwapChain();
     void createCommandBuffers();
     void createSynchronizationPrimitives();
     void setupDepthStencil();
@@ -170,11 +169,13 @@ public:
     void createDescriptorSets();
     void createPipelines();
 
+    
 
     // Scene Management
     std::unique_ptr<Scene> CurrentScene;
     void loadScene();
     void collectMeshes();
+    void buildMeshesSSBO();
     std::vector<Mesh*> SceneMeshes;
     void prepareSceneUniformBuffer();
     // Deferred Shadow Vars & Funcs
@@ -184,7 +185,8 @@ public:
 
     // Scene Renderers
     SceneRenderer* SceneRenderer;
-    
+
+    // Scene Config
     // Keep depth range as small as possible
     // for better shadow map precision
     float zNear = 0.1f;
@@ -229,7 +231,6 @@ public:
     /** @brief Set of device extensions to be enabled for this example (must be set in the derived constructor) */
     std::vector<const char*> enabledDeviceExtensions;
     std::vector<const char*> enabledInstanceExtensions;
-    
     std::vector<std::string> supportedInstanceExtensions;
     /** @brief Example settings that can be changed e.g. by command line arguments */
     struct Settings {
@@ -258,7 +259,6 @@ public:
     }
     VkResult createPhysicalDevice();
     
-    uint32_t getQueueFamilyIndex(VkQueueFlags queueFlags)const;
     VkResult createDeviceAndQueueAndCommandPool(VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char*> enabledExtensions, void* pNextChain, bool useSwapChain = true, VkQueueFlags requestedQueueTypes = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 
     /** @brief Encapsulated physical and logical vulkan device */
@@ -309,70 +309,75 @@ public:
 
     /** Descriptor management */
     /** Lights */
+    struct DirectionalLight
+    {
+        glm::vec3 direction;
+        glm::vec3 color;
+        // directional light range
+        glm::vec2 lr;
+        glm::vec2 tb;
+        glm::vec2 nf;
+    };
+
+    struct PointLight
+    {
+        glm::vec4 position;
+        glm::vec4 color;
+        float intensity;
+        glm::mat4 viewMatrix;
+    };
+
     struct SpotLight {
         glm::vec4 position;
         glm::vec4 target;
         glm::vec4 color;
-        glm::mat4 mvpMatrix;
+        glm::mat4 viewMatrix;
     };
     
-    struct UniformBufferLight
-    {
-        SpotLight lights[LIGHT_MAX];
-    }uniformBufferLight;
-    
-    vks::Buffer lightUniformBuffer;
-    
-    VkDescriptorPool lightDesciptorPool;
-    VkDescriptorSetLayout lightDescriptorSetLayout;
-    VkDescriptorSet lightDescriptorSet;
-    void CreateLightUniformBuffer();
-    void CreateLightDescriptor();
-    void UpdateLightUniformBuffer();
 
-    /** Views */
-    struct UniformBufferView
+    struct UniformBufferScene
     {
+        // camera
         glm::mat4 projectionMatrix;
         glm::mat4 viewMatrix;
-        glm::mat4 mvpMatrix;
+        glm::mat4 viewProjectionMatrix;
         glm::vec4 cameraPos;
-    }uniformBufferView;
-    
-    vks::Buffer viewUniformBuffer;
 
-    VkDescriptorPool viewDesciptorPool;
-    VkDescriptorSetLayout viewDescriptorSetLayout;
-    VkDescriptorSet viewDescriptorSet;
-    void CreateViewDescriptor();
-    void CreateViewUniformBuffer();
-    void UpdateViewUniformBuffer();
+        // light
+        SpotLight lights[LIGHT_MAX];
+        
+    }uniformBufferScene;
+
+    VkDescriptorPool SceneDescriptorPool;
+    VkDescriptorSetLayout SceneDescriptorSetLayout;
+    VkDescriptorSet SceneDescriptorSet;
+    vks::Buffer SceneUB;
     
+    void CreateSceneDescriptor();
+    void CreateSceneUniformBuffer();
+    void UpdateSceneUniformBuffer();
+
+
+    
+    VkDescriptorPool PerMeshDescriptorPool;
+    VkDescriptorSetLayout PerMeshDescriptorSetLayout;
+    std::vector<VkDescriptorSet> PerMeshDescriptorSets;
+    void CreatePerMeshDescriptor();
+    void CreateAndUploadMeshSSBO(vks::Buffer& MeshSSBO, uint32_t MeshSSBOSize, uint32_t MeshIndex);
+
+    
+    // require EXT dynamic uniform buffer!
+    vks::Buffer meshUniformBuffer;
 
 protected:
-
     
+    // Wraps the swap chain to present images (framebuffers) to the windowing system
+    VulkanSwapChain swapChain;
+
 private:
-
-    // Swapchain
-    VkSwapchainKHR swapChain;
-    // swapchain size
-    uint32_t width = 1280;
-    uint32_t height = 960;
-    // swapchain image count
-    uint32_t imageCount;
-    // swapchain images
-    std::vector<VkImage> images;
-    // swapchain buffers: image + view
-    std::vector<SwapChainBuffer> buffers;
-
-
+    
     // Surface related vars
     VkSurfaceKHR surface;
-    VkFormat colorFormat;
-    VkColorSpaceKHR colorSpace;
-    uint32_t queueNodeIndex = UINT32_MAX;
-
 
     // Vulkan instance, stores all per-application states
     VkInstance instance{ VK_NULL_HANDLE };

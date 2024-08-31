@@ -1,7 +1,8 @@
 #include "voko.h"
 
-void voko::initSurface()
+void voko::initSwapChain()
 {
+    // use sdl to creat os-specific surface
     int surfaceCreateRes =  SDL_Vulkan_CreateSurface(SDLWindow, instance, nullptr, &surface);
     if (surfaceCreateRes != 0) {
         // The function failed
@@ -11,306 +12,30 @@ void voko::initSurface()
         // std::cout << "Vulkan surface created successfully!" << std::endl;
     }
 
-
-// Create the os-specific surface
-//#if defined(VK_USE_PLATFORM_WIN32_KHR)
-//    VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
-//    surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-//    surfaceCreateInfo.hinstance = (HINSTANCE)platformHandle;
-//    surfaceCreateInfo.hwnd = (HWND)platformWindow;
-//    err = vkCreateWin32SurfaceKHR(instance, &surfaceCreateInfo, nullptr, &surface);
-//
-//    if (err != VK_SUCCESS) {
-//        vks::vks::tools::exitFatal("Could not create surface!", err);
-//    }
-
-    // Get available queue family properties
-    uint32_t queueCount;
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueCount, NULL);
-    assert(queueCount >= 1);
-
-    std::vector<VkQueueFamilyProperties> queueProps(queueCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueCount, queueProps.data());
-
-    // Iterate over each queue to learn whether it supports presenting:
-    // Find a queue with present support
-    // Will be used to present the swap chain images to the windowing system
-    std::vector<VkBool32> supportsPresent(queueCount);
-    for (uint32_t i = 0; i < queueCount; i++)
-    {
-        vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &supportsPresent[i]);
-    }
-
-    // Search for a graphics and a present queue in the array of queue
-    // families, try to find one that supports both
-    uint32_t graphicsQueueNodeIndex = UINT32_MAX;
-    uint32_t presentQueueNodeIndex = UINT32_MAX;
-    for (uint32_t i = 0; i < queueCount; i++)
-    {
-        if ((queueProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
-        {
-            if (graphicsQueueNodeIndex == UINT32_MAX)
-            {
-                graphicsQueueNodeIndex = i;
-            }
-
-            if (supportsPresent[i] == VK_TRUE)
-            {
-                graphicsQueueNodeIndex = i;
-                presentQueueNodeIndex = i;
-                break;
-            }
-        }
-    }
-    if (presentQueueNodeIndex == UINT32_MAX)
-    {
-        // If there's no queue that supports both present and graphics
-        // try to find a separate present queue
-        for (uint32_t i = 0; i < queueCount; ++i)
-        {
-            if (supportsPresent[i] == VK_TRUE)
-            {
-                presentQueueNodeIndex = i;
-                break;
-            }
-        }
-    }
-
-    // Exit if either a graphics or a presenting queue hasn't been found
-    if (graphicsQueueNodeIndex == UINT32_MAX || presentQueueNodeIndex == UINT32_MAX)
-    {
-        std::cerr << "Could not find a graphics and/or presenting queue!";
-    }
-
-    if (graphicsQueueNodeIndex != presentQueueNodeIndex)
-    {
-        std::cerr << "Separate graphics and presenting queues are not supported yet!";
-    }
-
-    queueNodeIndex = graphicsQueueNodeIndex;
-
-    // Get list of supported surface formats
-    uint32_t formatCount;
-    VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, NULL));
-    assert(formatCount > 0);
-
-    std::vector<VkSurfaceFormatKHR> surfaceFormats(formatCount);
-    VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, surfaceFormats.data()));
-
-    // We want to get a format that best suits our needs, so we try to get one from a set of preferred formats
-    // Initialize the format to the first one returned by the implementation in case we can't find one of the preffered formats
-    VkSurfaceFormatKHR selectedFormat = surfaceFormats[0];
-    std::vector<VkFormat> preferredImageFormats = {
-        VK_FORMAT_B8G8R8A8_UNORM,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_FORMAT_A8B8G8R8_UNORM_PACK32
-    };
-
-    for (auto& availableFormat : surfaceFormats) {
-        if (std::find(preferredImageFormats.begin(), preferredImageFormats.end(), availableFormat.format) != preferredImageFormats.end()) {
-            selectedFormat = availableFormat;
-            break;
-        }
-    }
-
-    colorFormat = selectedFormat.format;
-    colorSpace = selectedFormat.colorSpace;
+    
+    // equals native swapchain.initSwapChain() implementation
+    swapChain.vokoInitSwapChain(surface);
+    
 }
 
 void voko::createCommandPool()
 {
     VkCommandPoolCreateInfo cmdPoolInfo = {};
     cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    cmdPoolInfo.queueFamilyIndex = queueNodeIndex;
+    cmdPoolInfo.queueFamilyIndex = swapChain.queueNodeIndex;
     cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     VK_CHECK_RESULT(vkCreateCommandPool(device, &cmdPoolInfo, nullptr, &commandPool));
 }
 
-void voko::createSwapchain()
+void voko::setupSwapChain()
 {
-    // Store the current swap chain handle so we can use it later on to ease up recreation
-    VkSwapchainKHR oldSwapchain = swapChain;
-
-    // Get physical device surface properties and formats
-        VkSurfaceCapabilitiesKHR surfCaps;
-    VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfCaps));
-
-    // Get available present modes
-    uint32_t presentModeCount;
-    VK_CHECK_RESULT(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, NULL));
-    assert(presentModeCount > 0);
-
-    std::vector<VkPresentModeKHR> presentModes(presentModeCount);
-    VK_CHECK_RESULT(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModes.data()));
-
-    VkExtent2D swapchainExtent = {};
-    // If width (and height) equals the special value 0xFFFFFFFF, the size of the surface will be set by the swapchain
-    if (surfCaps.currentExtent.width == (uint32_t)-1)
-    {
-        // If the surface size is undefined, the size is set to
-        // the size of the images requested.
-        swapchainExtent.width = width;
-        swapchainExtent.height = height;
-    }
-    else
-    {
-        // If the surface size is defined, the swap chain size must match
-        swapchainExtent = surfCaps.currentExtent;
-        width = surfCaps.currentExtent.width;
-        height = surfCaps.currentExtent.height;
-    }
-
-    // Select a present mode for the swapchain
-
-// The VK_PRESENT_MODE_FIFO_KHR mode must always be present as per spec
-// This mode waits for the vertical blank ("v-sync")
-    VkPresentModeKHR swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
-
-    // If v-sync is not requested, try to find a mailbox mode
-    // It's the lowest latency non-tearing present mode available
-    if (!settings.vsync)
-    {
-        for (size_t i = 0; i < presentModeCount; i++)
-        {
-            if (presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
-            {
-                swapchainPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
-                break;
-            }
-            if (presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR)
-            {
-                swapchainPresentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
-            }
-        }
-    }
-
-    // Determine the number of images
-    uint32_t desiredNumberOfSwapchainImages = surfCaps.minImageCount + 1;
-#if (defined(VK_USE_PLATFORM_MACOS_MVK) && defined(VK_EXAMPLE_XCODE_GENERATED))
-    // SRS - Work around known MoltenVK issue re 2x frame rate when vsync (VK_PRESENT_MODE_FIFO_KHR) enabled
-    struct utsname sysInfo;
-    uname(&sysInfo);
-    // SRS - When vsync is on, use minImageCount when not in fullscreen or when running on Apple Silcon
-    // This forces swapchain image acquire frame rate to match display vsync frame rate
-    if (vsync && (!fullscreen || strcmp(sysInfo.machine, "arm64") == 0))
-    {
-        desiredNumberOfSwapchainImages = surfCaps.minImageCount;
-    }
-#endif
-    if ((surfCaps.maxImageCount > 0) && (desiredNumberOfSwapchainImages > surfCaps.maxImageCount))
-    {
-        desiredNumberOfSwapchainImages = surfCaps.maxImageCount;
-    }
-
-    // Find the transformation of the surface
-    VkSurfaceTransformFlagsKHR preTransform;
-    if (surfCaps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
-    {
-        // We prefer a non-rotated transform
-        preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-    }
-    else
-    {
-        preTransform = surfCaps.currentTransform;
-    }
-
-    // Find a supported composite alpha format (not all devices support alpha opaque)
-    VkCompositeAlphaFlagBitsKHR compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    // Simply select the first composite alpha format available
-    std::vector<VkCompositeAlphaFlagBitsKHR> compositeAlphaFlags = {
-        VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
-        VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,
-        VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
-    };
-    for (auto& compositeAlphaFlag : compositeAlphaFlags) {
-        if (surfCaps.supportedCompositeAlpha & compositeAlphaFlag) {
-            compositeAlpha = compositeAlphaFlag;
-            break;
-        };
-    }
-
-    VkSwapchainCreateInfoKHR swapchainCI = {};
-    swapchainCI.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapchainCI.surface = surface;
-    swapchainCI.minImageCount = desiredNumberOfSwapchainImages;
-    swapchainCI.imageFormat = colorFormat;
-    swapchainCI.imageColorSpace = colorSpace;
-    swapchainCI.imageExtent = { swapchainExtent.width, swapchainExtent.height };
-    swapchainCI.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    swapchainCI.preTransform = (VkSurfaceTransformFlagBitsKHR)preTransform;
-    swapchainCI.imageArrayLayers = 1;
-    swapchainCI.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapchainCI.queueFamilyIndexCount = 0;
-    swapchainCI.presentMode = swapchainPresentMode;
-    // Setting oldSwapChain to the saved handle of the previous swapchain aids in resource reuse and makes sure that we can still present already acquired images
-    swapchainCI.oldSwapchain = oldSwapchain;
-    // Setting clipped to VK_TRUE allows the implementation to discard rendering outside of the surface area
-    swapchainCI.clipped = VK_TRUE;
-    swapchainCI.compositeAlpha = compositeAlpha;
-
-    // Enable transfer source on swap chain images if supported
-    if (surfCaps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
-        swapchainCI.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    }
-
-    // Enable transfer destination on swap chain images if supported
-    if (surfCaps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT) {
-        swapchainCI.imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    }
-
-    VK_CHECK_RESULT(vkCreateSwapchainKHR(device, &swapchainCI, nullptr, &swapChain));
-
-    // If an existing swap chain is re-created, destroy the old swap chain
-    // This also cleans up all the presentable images
-    if (oldSwapchain != VK_NULL_HANDLE)
-    {
-        for (uint32_t i = 0; i < imageCount; i++)
-        {
-            vkDestroyImageView(device, buffers[i].view, nullptr);
-        }
-        vkDestroySwapchainKHR(device, oldSwapchain, nullptr);
-    }
-    VK_CHECK_RESULT(vkGetSwapchainImagesKHR(device, swapChain, &imageCount, NULL));
-
-    // Get the swap chain images
-    images.resize(imageCount);
-    VK_CHECK_RESULT(vkGetSwapchainImagesKHR(device, swapChain, &imageCount, images.data()));
-
-    // Get the swap chain buffers containing the image and imageview
-    buffers.resize(imageCount);
-    for (uint32_t i = 0; i < imageCount; i++)
-    {
-        VkImageViewCreateInfo colorAttachmentView = {};
-        colorAttachmentView.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        colorAttachmentView.pNext = NULL;
-        colorAttachmentView.format = colorFormat;
-        colorAttachmentView.components = {
-            VK_COMPONENT_SWIZZLE_R,
-            VK_COMPONENT_SWIZZLE_G,
-            VK_COMPONENT_SWIZZLE_B,
-            VK_COMPONENT_SWIZZLE_A
-        };
-        colorAttachmentView.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        colorAttachmentView.subresourceRange.baseMipLevel = 0;
-        colorAttachmentView.subresourceRange.levelCount = 1;
-        colorAttachmentView.subresourceRange.baseArrayLayer = 0;
-        colorAttachmentView.subresourceRange.layerCount = 1;
-        colorAttachmentView.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        colorAttachmentView.flags = 0;
-
-        buffers[i].image = images[i];
-
-        colorAttachmentView.image = buffers[i].image;
-
-        VK_CHECK_RESULT(vkCreateImageView(device, &colorAttachmentView, nullptr, &buffers[i].view));
-    }
+    swapChain.create(&width, &height, settings.vsync, settings.fullscreen);
 }
 
 void voko::createCommandBuffers()
 {
     // Create one command buffer for each swap chain image and reuse for rendering
-    drawCmdBuffers.resize(imageCount);
+    drawCmdBuffers.resize(swapChain.imageCount);
     VkCommandBufferAllocateInfo commandBufferAllocateInfo{};
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     commandBufferAllocateInfo.commandPool = commandPool;
@@ -376,73 +101,73 @@ void voko::setupDepthStencil()
 void voko::setupRenderPass()
 {
     std::array<VkAttachmentDescription, 2> attachments = {};
-    // Color attachment
-    attachments[0].format = colorFormat;
-    attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    // Depth attachment
-    attachments[1].format = depthFormat;
-    attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	// Color attachment
+	attachments[0].format = swapChain.colorFormat;
+	attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+	attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	// Depth attachment
+	attachments[1].format = depthFormat;
+	attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+	attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-    VkAttachmentReference colorReference = {};
-    colorReference.attachment = 0;
-    colorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	VkAttachmentReference colorReference = {};
+	colorReference.attachment = 0;
+	colorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-    VkAttachmentReference depthReference = {};
-    depthReference.attachment = 1;
-    depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	VkAttachmentReference depthReference = {};
+	depthReference.attachment = 1;
+	depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-    VkSubpassDescription subpassDescription = {};
-    subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpassDescription.colorAttachmentCount = 1;
-    subpassDescription.pColorAttachments = &colorReference;
-    subpassDescription.pDepthStencilAttachment = &depthReference;
-    subpassDescription.inputAttachmentCount = 0;
-    subpassDescription.pInputAttachments = nullptr;
-    subpassDescription.preserveAttachmentCount = 0;
-    subpassDescription.pPreserveAttachments = nullptr;
-    subpassDescription.pResolveAttachments = nullptr;
+	VkSubpassDescription subpassDescription = {};
+	subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	subpassDescription.colorAttachmentCount = 1;
+	subpassDescription.pColorAttachments = &colorReference;
+	subpassDescription.pDepthStencilAttachment = &depthReference;
+	subpassDescription.inputAttachmentCount = 0;
+	subpassDescription.pInputAttachments = nullptr;
+	subpassDescription.preserveAttachmentCount = 0;
+	subpassDescription.pPreserveAttachments = nullptr;
+	subpassDescription.pResolveAttachments = nullptr;
 
-    // Subpass dependencies for layout transitions
-    std::array<VkSubpassDependency, 2> dependencies;
+	// Subpass dependencies for layout transitions
+	std::array<VkSubpassDependency, 2> dependencies;
 
-    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[0].dstSubpass = 0;
-    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-    dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-    dependencies[0].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-    dependencies[0].dependencyFlags = 0;
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+	dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+	dependencies[0].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+	dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+	dependencies[0].dependencyFlags = 0;
 
-    dependencies[1].srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[1].dstSubpass = 0;
-    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[1].srcAccessMask = 0;
-    dependencies[1].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
-    dependencies[1].dependencyFlags = 0;
+	dependencies[1].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].dstSubpass = 0;
+	dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	dependencies[1].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	dependencies[1].srcAccessMask = 0;
+	dependencies[1].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+	dependencies[1].dependencyFlags = 0;
 
-    VkRenderPassCreateInfo renderPassInfo = {};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-    renderPassInfo.pAttachments = attachments.data();
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpassDescription;
-    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-    renderPassInfo.pDependencies = dependencies.data();
+	VkRenderPassCreateInfo renderPassInfo = {};
+	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+	renderPassInfo.pAttachments = attachments.data();
+	renderPassInfo.subpassCount = 1;
+	renderPassInfo.pSubpasses = &subpassDescription;
+	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	renderPassInfo.pDependencies = dependencies.data();
 
-    VK_CHECK_RESULT(vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass));
+	VK_CHECK_RESULT(vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass));
 }
 
 void voko::createPipelineCache()
@@ -470,10 +195,10 @@ void voko::setupFrameBuffer()
     frameBufferCreateInfo.layers = 1;
 
     // Create frame buffers for every swap chain image
-    frameBuffers.resize(imageCount);
+    frameBuffers.resize(swapChain.imageCount);
     for (uint32_t i = 0; i < frameBuffers.size(); i++)
     {
-        attachments[0] = buffers[i].view;
+        attachments[0] = swapChain.buffers[i].view;
         VK_CHECK_RESULT(vkCreateFramebuffer(device, &frameBufferCreateInfo, nullptr, &frameBuffers[i]));
     }
 }
@@ -688,10 +413,15 @@ VkResult voko::createPhysicalDevice()
     physicalDevice = physicalDevices[selectedDevice];
 
 
-    
+    // Store properties (including limits), features and memory properties of the physical device (so that examples can check against them)
+    vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+    vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &deviceMemoryProperties);
+
+        
     // Derived examples can override this to set actual features (based on above readings) to enable for logical device creation
     getEnabledFeatures();
-
+    
     // Vulkan device creation
     // This is handled by a separate class that gets a logical device representation
     // and encapsulates functions related to a device
@@ -725,6 +455,9 @@ VkResult voko::createDeviceAndQueueAndCommandPool(VkPhysicalDeviceFeatures enabl
         validFormat = vks::tools::getSupportedDepthFormat(physicalDevice, &depthFormat);
     }
     assert(validFormat);
+
+    swapChain.connect(instance, physicalDevice, device);
+    
 
     // Create Semaphores
     VkSemaphoreCreateInfo semaphoreCreateInfo{};

@@ -7,8 +7,13 @@
 DeferredRenderer::DeferredRenderer(
     vks::VulkanDevice* inVulkanDeivce,
     const std::vector<Mesh*>& sceneMeshes,
+    VkDescriptorSetLayout inSceneDsLayout,
+    VkDescriptorSet inSceneDs,
+    VkDescriptorSetLayout inPerMeshDsLayout,
+    const std::vector<VkDescriptorSet>& inPerMeshDSs,
     VkSemaphore inPresentComplete,
     VkSemaphore inRenderComplete,
+    
     VkQueue inGfxQueue) : SceneRenderer()
 {
     /* Initialize self vars:
@@ -23,7 +28,14 @@ DeferredRenderer::DeferredRenderer(
 
     gfxQueue = inGfxQueue;
 
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    sceneDescriptorSetLayout = inSceneDsLayout;
+    sceneDescriptorSet = inSceneDs;
+    
+    perMeshDescriptorSetLayout = inPerMeshDsLayout;
+    perMeshDescriptorSets = inPerMeshDSs;
+    
+    submitInfo = vks::initializers::submitInfo();
+    /** @brief Pipeline stages used to wait at for graphics queue submissions */
     VkPipelineStageFlags submitPipelineStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     submitInfo.pWaitDstStageMask = &submitPipelineStages;
     submitInfo.waitSemaphoreCount = 1;
@@ -36,7 +48,11 @@ DeferredRenderer::DeferredRenderer(
     std::unique_ptr<ShadowPass> shadow_pass = std::make_unique<ShadowPass>(vulkanDevice);
     
     shadow_pass->setupFrameBuffer(width, height);
-    shadow_pass->setDescriptorSetLayouts();
+    shadow_pass->setDescriptorSetLayouts(
+        sceneDescriptorSetLayout,
+        sceneDescriptorSet,
+        perMeshDescriptorSetLayout,
+         perMeshDescriptorSets );
     shadow_pass->preparePipeline();
     shadow_pass->buildCommandBuffer(sceneMeshes);
 
@@ -53,11 +69,10 @@ DeferredRenderer::DeferredRenderer(
 
 void DeferredRenderer::Render()
 {
-    
     // Set submitInfo for sequential passes
     for(size_t i=0;i<RenderPasses.size();i++)
     {
-        auto& pass = RenderPasses[i];
+        const auto& pass = RenderPasses[i];
         if(i == 0) // wait for present
         {
             submitInfo.pWaitSemaphores = &presentComplete;
@@ -73,6 +88,7 @@ void DeferredRenderer::Render()
         {
             submitInfo.pSignalSemaphores = &renderComplete;
         }
+        submitInfo.pCommandBuffers = &pass->cmdBuffer;
         VK_CHECK_RESULT(vkQueueSubmit(gfxQueue, 1, &submitInfo, VK_NULL_HANDLE));
     }
 

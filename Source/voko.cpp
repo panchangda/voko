@@ -5,10 +5,11 @@
 #include <vk_mem_alloc.h>
 
 
-#include "DeferredRenderer.h"
+
 #include "VulkanglTFModel.h"
 #include "SceneGraph/Light.h"
 #include "SceneGraph/Mesh.h"
+#include "Renderer/DeferredRenderer.h"
 
 void voko::init()
 {
@@ -21,21 +22,20 @@ void voko::init()
 
 void voko::prepare()
 {
-    // init swapchain's surface firstly
     // Implemented in voko_initializer.cpp
-    initSurface();
+    initSwapChain(); // different implement, using sdl to initialize swapchain' surface 
     createCommandPool();
-    createSwapchain();
+    setupSwapChain();
     createCommandBuffers();
     createSynchronizationPrimitives();
     setupDepthStencil();
     setupRenderPass();
     createPipelineCache();
     setupFrameBuffer();
+    
 
-
-    // init hello triangle
-	// Setup a default look-at camera
+    /** Initialize: */
+    // Setup a default look-at camera
     camera.type = Camera::CameraType::firstperson;
     camera.movementSpeed = 5.0f;
     camera.rotationSpeed = 0.25f;
@@ -43,34 +43,14 @@ void voko::prepare()
     camera.setRotation(glm::vec3(-0.75f, 12.5f, 0.0f));
     camera.setPerspective(60.0f, (float)width / (float)height, zNear, zFar);
     timerSpeed *= 0.25f;
-
     
-    // Hello Triangle Functions
-    // createTriangleVertexBuffer();
-    // createUniformBuffers();
-    // createDescriptorSetLayout();
-    // createDescriptorPool();
-    // createDescriptorSets();
-    // createPipelines();
-
-
-
-    // Deferred Shadow Funcs
-    // loadAssets();
-    // deferredSetup();
-    // shadowSetup();
-    // initLights();
-    // prepareUniformBuffers();
-    // setupDescriptors();
-    // preparePipelines();
-    // buildCommandBuffers();
-    // buildDeferredCommandBuffer();
-
-
-    /** Initialize: */
-    // Scene graph
+    // Load Assets & Create Scene graph
     loadScene();
     collectMeshes();
+
+    // Per Mesh SSBO
+    CreatePerMeshDescriptor();
+    buildMeshesSSBO();
 
     // Scene UB
     prepareSceneUniformBuffer();
@@ -79,6 +59,10 @@ void voko::prepare()
     SceneRenderer = new DeferredRenderer(
         vulkanDevice,
         SceneMeshes,
+        SceneDescriptorSetLayout,
+        SceneDescriptorSet,
+        PerMeshDescriptorSetLayout,
+        PerMeshDescriptorSets,
         semaphores.presentComplete,
         semaphores.renderComplete,
         queue);
@@ -87,7 +71,16 @@ void voko::prepare()
 }
 
 
-void voko::getEnabledFeatures(){}
+void voko::getEnabledFeatures()
+{
+    // Geometry shader support is required for writing to multiple shadow map layers in one single pass
+    if (deviceFeatures.geometryShader) {
+        enabledFeatures.geometryShader = VK_TRUE;
+    }
+    else {
+        vks::tools::exitFatal("Selected GPU does not support geometry shaders!", VK_ERROR_FEATURE_NOT_PRESENT);
+    }
+}
 
 void voko::getEnabledExtensions(){}
 
@@ -204,13 +197,19 @@ void voko::loadScene()
     const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::PreMultiplyVertexColors | vkglTF::FileLoadingFlags::FlipY;
 
     // Meshes: model + texture
+    
     std::unique_ptr<Node> ArmorKnightMeshNode = std::make_unique<Node>(0, "ArmorKnight");;
     std::unique_ptr<Mesh> ArmorKnight = std::make_unique<Mesh>("ArmorKnight");
     ArmorKnight->VkGltfModel.loadFromFile(getAssetPath() + "models/armor/armor.gltf", vulkanDevice, queue, glTFLoadingFlags);
     ArmorKnight->Textures.ColorMap.loadFromFile(getAssetPath() + "models/armor/colormap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
     ArmorKnight->Textures.NormalMap.loadFromFile(getAssetPath() + "models/armor/normalmap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    // Set per instance pos for mesh instance drawing
+    ArmorKnight->MeshInstanceSSBO.push_back(PerInstanceSSBO{.pos = glm::vec4(0.0f)});
+    ArmorKnight->MeshInstanceSSBO.push_back(PerInstanceSSBO{.pos = glm::vec4(-7.0f, 0.0, -4.0f, 0.0f)});
+    ArmorKnight->MeshInstanceSSBO.push_back(PerInstanceSSBO{.pos = glm::vec4(4.0f, 0.0, -6.0f, 0.0f)});
     ArmorKnight->set_node(*ArmorKnightMeshNode);
 
+    
     std::unique_ptr<Node> StoneFloor02Node = std::make_unique<Node>(0, "StoneFloor02");
     std::unique_ptr<Mesh> StoneFloor02 = std::make_unique<Mesh>("StoneFloor02");
     StoneFloor02->VkGltfModel.loadFromFile(getAssetPath() + "models/deferred_box.gltf", vulkanDevice, queue, glTFLoadingFlags);
@@ -223,12 +222,13 @@ void voko::loadScene()
     CurrentScene->add_component(std::move(StoneFloor02));
     CurrentScene->add_node(std::move(ArmorKnightMeshNode));
     CurrentScene->add_node(std::move(StoneFloor02Node));
-    
+
     // Lights
-    std::vector<glm::vec3>LightPos = {
-    glm::vec3(-14.0f, -0.5f, 15.0f),
-    glm::vec3(14.0f, -4.0f, 12.0f),
-    glm::vec3(0.0f, -10.0f, 4.0f)};
+    std::vector<glm::vec3> LightPos = {
+        glm::vec3(-14.0f, -0.5f, 15.0f),
+        glm::vec3(14.0f, -4.0f, 12.0f),
+        glm::vec3(0.0f, -10.0f, 4.0f)
+    };
     std::vector<LightProperties> LightProperties = {
         {
             .direction = glm::vec3(-2.0f, 0.0f, 0.0f),
@@ -266,27 +266,39 @@ void voko::collectMeshes()
     SceneMeshes = CurrentScene->get_components<Mesh>();
 }
 
+void voko::buildMeshesSSBO()
+{
+    for(int Mesh_Index=0;Mesh_Index<SceneMeshes.size();Mesh_Index++)
+    {
+        auto const mesh = SceneMeshes[Mesh_Index];
+        int meshInstanceCount = mesh->MeshInstanceSSBO.size();
+        if(meshInstanceCount > 0)
+        {
+            uint32_t SSBOSize = sizeof(PerInstanceSSBO) * mesh->MeshInstanceSSBO.size();
+            CreateAndUploadMeshSSBO(mesh->MeshSSBO, SSBOSize, Mesh_Index);
+        }
+    }
+}
+
 void voko::prepareSceneUniformBuffer()
 {
-    CreateLightUniformBuffer();
-    CreateLightDescriptor();
-    CreateViewUniformBuffer();
-    CreateViewDescriptor();
+    CreateSceneUniformBuffer();
+    CreateSceneDescriptor();
 }
 
 
-
+void voko::windowResize()
+{
+    
+}
 
 void voko::render()
 {
     if (!prepared) 
     	return;
+
     
-    UpdateViewUniformBuffer();
-    UpdateLightUniformBuffer();
-    
-    // UpdateUniformBufferDeferred();
-    // updateUniformBufferOffscreen();
+    UpdateSceneUniformBuffer();
 
     draw();
 }
@@ -297,32 +309,6 @@ void voko::draw()
     prepareFrame();
 
     SceneRenderer->Render();
-    
-    // // Offscreen rendering
-    //
-    // // Wait for swap chain presentation to finish
-    // submitInfo.pWaitSemaphores = &semaphores.presentComplete;
-    // // Signal ready with offscreen semaphore
-    // submitInfo.pSignalSemaphores = &offscreenSemaphore;
-    //
-    // // Submit work
-    //
-    // // Shadow map pass
-    // submitInfo.commandBufferCount = 1;
-    // submitInfo.pCommandBuffers = &offScreenCmdBuffer;
-    // VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
-    //
-    // // Scene rendering
-    //
-    // // Wait for offscreen semaphore
-    // submitInfo.pWaitSemaphores = &offscreenSemaphore;
-    // // Signal ready with render complete semaphore
-    // submitInfo.pSignalSemaphores = &semaphores.renderComplete;
-    //
-    // // Submit work
-    // submitInfo.pCommandBuffers = &drawCmdBuffers[currentBuffer];
-    // VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
-
     
     submitFrame();
 
@@ -352,12 +338,12 @@ void voko::nextFrame()
 void voko::prepareFrame()
 {
     // Acquire the next image from the swap chain
-    VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, semaphores.presentComplete, (VkFence)nullptr, &currentBuffer);
+    VkResult result = swapChain.acquireNextImage(semaphores.presentComplete, &currentBuffer);
     // Recreate the swapchain if it's no longer compatible with the surface (OUT_OF_DATE)
     // SRS - If no longer optimal (VK_SUBOPTIMAL_KHR), wait until submitFrame() in case number of swapchain images will change on resize
     if ((result == VK_ERROR_OUT_OF_DATE_KHR) || (result == VK_SUBOPTIMAL_KHR)) {
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-            //windowResize();
+            windowResize();
         }
         return;
     }
@@ -369,20 +355,18 @@ void voko::prepareFrame()
 void voko::submitFrame()
 {
 
-    VkPresentInfoKHR presentInfo = {};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.pNext = NULL;
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = &swapChain;
-    presentInfo.pImageIndices = &currentBuffer;
-    // Check if a wait semaphore has been specified to wait for before presenting the image
-    if (semaphores.renderComplete != VK_NULL_HANDLE)
-    {
-        presentInfo.pWaitSemaphores = &semaphores.renderComplete;
-        presentInfo.waitSemaphoreCount = 1;
+    VkResult result = swapChain.queuePresent(queue, currentBuffer, semaphores.renderComplete);
+    // Recreate the swapchain if it's no longer compatible with the surface (OUT_OF_DATE) or no longer optimal for presentation (SUBOPTIMAL)
+    if ((result == VK_ERROR_OUT_OF_DATE_KHR) || (result == VK_SUBOPTIMAL_KHR)) {
+        windowResize();
+        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+            return;
+        }
     }
-
-    VkResult result = vkQueuePresentKHR(queue, &presentInfo);
+    else {
+        VK_CHECK_RESULT(result);
+    }
+    VK_CHECK_RESULT(vkQueueWaitIdle(queue));
 
 
     // Recreate the swapchain if it's no longer compatible with the surface (OUT_OF_DATE) or no longer optimal for presentation (SUBOPTIMAL)
@@ -542,165 +526,125 @@ VkPipelineShaderStageCreateInfo voko::loadShader(std::string fileName, VkShaderS
     return shaderStage;
 }
 
-void voko::CreateLightUniformBuffer()
+void voko::CreateSceneDescriptor()
 {
-    VK_CHECK_RESULT(
-        vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &lightUniformBuffer, sizeof(UniformBufferLight)));
-    // Map persistent
-    VK_CHECK_RESULT(lightUniformBuffer.map());
-    
-}
-
-void voko::CreateLightDescriptor()
-{
-    // Light Pool: UB size = 1
+    // Scene pool
     std::vector<VkDescriptorPoolSize> poolSizes = {
-        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2),
+        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
     };
     VkDescriptorPoolCreateInfo descriptorPoolInfo = vks::initializers::descriptorPoolCreateInfo(poolSizes, 1);
-    VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &lightDesciptorPool));
+    VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &SceneDescriptorPool));
+
+    
     std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
-        // Binding 0: Vertex or Geometry shader uniform buffer
-        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0),
+        // Binding 0: Scene Uniform Buffer: view info, light info...
+        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS, 0)
     };
     VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &lightDescriptorSetLayout));
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &SceneDescriptorSetLayout));
 
     // Sets
     std::vector<VkWriteDescriptorSet> writeDescriptorSets;
-    VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(lightDesciptorPool, &lightDescriptorSetLayout, 1);
-
-
-    // mapping to Light ub 
-    VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &lightDescriptorSet));
+    VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(SceneDescriptorPool, &SceneDescriptorSetLayout, 1);
+    
+    // mapping 
+    VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &SceneDescriptorSet));
     writeDescriptorSets = {
         // Binding 0: Vertex shader uniform buffer
-        vks::initializers::writeDescriptorSet(lightDescriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &lightUniformBuffer.descriptor),
+        vks::initializers::writeDescriptorSet(SceneDescriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &SceneUB.descriptor),
     };
     vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
 }
 
-void voko::UpdateLightUniformBuffer()
+void voko::CreateSceneUniformBuffer()
 {
+    VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+     &SceneUB, sizeof(uniformBufferScene)));
+
+
+    // Map persistent
+    VK_CHECK_RESULT(SceneUB.map());
+}
+
+void voko::UpdateSceneUniformBuffer()
+{
+    
+    // Update view (camera)
+    uniformBufferScene.projectionMatrix = camera.matrices.perspective;
+    uniformBufferScene.viewMatrix = camera.matrices.view;
+
+    // why revert x&z? 
+    uniformBufferScene.cameraPos = glm::vec4(camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);;
+    memcpy(SceneUB.mapped, &uniformBufferScene, sizeof(uniformBufferScene));
+
+
     // Update lights
     // Animate
-    uniformBufferLight.lights[0].position.x = -14.0f + std::abs(sin(glm::radians(timer * 360.0f)) * 20.0f);
-    uniformBufferLight.lights[0].position.z = 15.0f + cos(glm::radians(timer *360.0f)) * 1.0f;
+    uniformBufferScene.lights[0].position.x = -14.0f + std::abs(sin(glm::radians(timer * 360.0f)) * 20.0f);
+    uniformBufferScene.lights[0].position.z = 15.0f + cos(glm::radians(timer *360.0f)) * 1.0f;
     
-    uniformBufferLight.lights[1].position.x = 14.0f - std::abs(sin(glm::radians(timer * 360.0f)) * 2.5f);
-    uniformBufferLight.lights[1].position.z = 13.0f + cos(glm::radians(timer *360.0f)) * 4.0f;
+    uniformBufferScene.lights[1].position.x = 14.0f - std::abs(sin(glm::radians(timer * 360.0f)) * 2.5f);
+    uniformBufferScene.lights[1].position.z = 13.0f + cos(glm::radians(timer *360.0f)) * 4.0f;
     
-    uniformBufferLight.lights[2].position.x = 0.0f + sin(glm::radians(timer *360.0f)) * 4.0f;
-    uniformBufferLight.lights[2].position.z = 4.0f + cos(glm::radians(timer *360.0f)) * 2.0f;
+    uniformBufferScene.lights[2].position.x = 0.0f + sin(glm::radians(timer *360.0f)) * 4.0f;
+    uniformBufferScene.lights[2].position.z = 4.0f + cos(glm::radians(timer *360.0f)) * 2.0f;
     
     for (int i = 0; i < LIGHT_COUNT; i++) {
         // mvp from light's pov (for shadows)
         glm::mat4 shadowProj = glm::perspective(glm::radians(lightFOV), 1.0f, zNear, zFar);
-        glm::mat4 shadowView = glm::lookAt(glm::vec3(uniformBufferLight.lights[i].position), glm::vec3(uniformBufferLight.lights[i].target), glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 shadowModel = glm::mat4(1.0f);
+        glm::mat4 shadowView = glm::lookAt(glm::vec3(uniformBufferScene.lights[i].position), glm::vec3(uniformBufferScene.lights[i].target), glm::vec3(0.0f, 1.0f, 0.0f));
     
-        uniformBufferLight.lights[i].mvpMatrix = shadowProj * shadowView * shadowModel;
+        uniformBufferScene.lights[i].viewMatrix = shadowProj * shadowView;
     }
-    memcpy(lightUniformBuffer.mapped, &uniformBufferLight, sizeof(uniformBufferLight));
+    memcpy(SceneUB.mapped, &uniformBufferScene, sizeof(uniformBufferScene));
 }
 
-void voko::CreateViewUniformBuffer()
+void voko::CreatePerMeshDescriptor()
 {
-    VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-         &viewUniformBuffer, sizeof(UniformBufferView)));
-
-
-    // Map persistent
-    VK_CHECK_RESULT(viewUniformBuffer.map());
-    
-}
-void voko::UpdateViewUniformBuffer()
-{
-    // Update view (camera)
-    uniformBufferView.projectionMatrix = camera.matrices.perspective;
-    uniformBufferView.viewMatrix = camera.matrices.view;
-
-    // why revert x&z? 
-    uniformBufferView.cameraPos = glm::vec4(camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);;
-    memcpy(viewUniformBuffer.mapped, &uniformBufferView, sizeof(UniformBufferView));
-
-
-}
-
-void voko::CreateViewDescriptor()
-{
-    // View Pool: UB size = 1
+    // Create Per Mesh SSBO Pool
     std::vector<VkDescriptorPoolSize> poolSizes = {
-        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2),
+        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, MESH_MAX),
     };
-    VkDescriptorPoolCreateInfo descriptorPoolInfo = vks::initializers::descriptorPoolCreateInfo(poolSizes, 1);
-    VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &viewDesciptorPool));
+    VkDescriptorPoolCreateInfo descriptorPoolInfo = vks::initializers::descriptorPoolCreateInfo(poolSizes, MESH_MAX);
+    VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &PerMeshDescriptorPool));
+
+    // Declare DescriptorSet Layout    
     std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
-        // Binding 0: Vertex or Geometry shader uniform buffer
-        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0),
+        // Binding 0: Mesh Instance Buffer
+        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0)
     };
     VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &viewDescriptorSetLayout));
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &PerMeshDescriptorSetLayout));
 
-    // Sets
-    std::vector<VkWriteDescriptorSet> writeDescriptorSets;
-    VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(viewDesciptorPool, &viewDescriptorSetLayout, 1);
-    
-    // mapping to light ub 
-    VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &viewDescriptorSet));
-    writeDescriptorSets = {
-        // Binding 0: Vertex shader uniform buffer
-        vks::initializers::writeDescriptorSet(viewDescriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &viewUniformBuffer.descriptor),
-    };
-    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+
+    PerMeshDescriptorSets.resize(MESH_MAX);
+    for(int Mesh_Index = 0; Mesh_Index < MESH_MAX; Mesh_Index++)
+    {
+        // pre allocate ds for meshes
+        VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(PerMeshDescriptorPool, &PerMeshDescriptorSetLayout, 1);
+        VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &PerMeshDescriptorSets[Mesh_Index]));
+    }
 }
 
+void voko::CreateAndUploadMeshSSBO(vks::Buffer& MeshSSBO, uint32_t MeshSSBOSize, uint32_t MeshIndex)
+{
+    // Create buffer
+    VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    &MeshSSBO, MeshSSBOSize));
 
+    // Map persistent
+    VK_CHECK_RESULT(MeshSSBO.map());
+    
+    // Update corresponding pre-allocated sets
+    std::vector<VkWriteDescriptorSet> writeDescriptorSets;
+    writeDescriptorSets = {
+        // Binding 0: Mesh Instance Buffer
+        vks::initializers::writeDescriptorSet(PerMeshDescriptorSets[MeshIndex], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 0, &MeshSSBO.descriptor),
+    };
+    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+    
+}
 
-
-
-
-// voko::Light voko::initLight(glm::vec3 pos, glm::vec3 target, glm::vec3 color)
-// {
-//     Light light;
-//     light.position = glm::vec4(pos, 1.0f);
-//     light.target = glm::vec4(target, 0.0f);
-//     light.color = glm::vec4(color, 0.0f);
-//     return light;
-// }
-// void voko::initLights()
-// {
-//     uniformDataComposition.lights[0] = initLight(glm::vec3(-14.0f, -0.5f, 15.0f), glm::vec3(-2.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.5f, 0.5f));
-//     uniformDataComposition.lights[1] = initLight(glm::vec3(14.0f, -4.0f, 12.0f), glm::vec3(2.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-//     uniformDataComposition.lights[2] = initLight(glm::vec3(0.0f, -10.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f));
-// }
-
-// void voko::prepareUniformBuffers()
-// {
-//     // Offscreen vertex shader
-//     VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-//         &offscreenUB, sizeof(UniformDataOffscreen)));
-//
-//     // Deferred fragment shader
-//     VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-//         &compositionUB, sizeof(UniformDataComposition)));
-//
-//     // Shadow map vertex shader (matrices from shadow's pov)
-//     VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-//         &shadowGeometryShaderUB, sizeof(UniformDataShadows)));
-//
-//     // Map persistent
-//     VK_CHECK_RESULT(offscreenUB.map());
-//     VK_CHECK_RESULT(compositionUB.map());
-//     VK_CHECK_RESULT(shadowGeometryShaderUB.map());
-//
-//     // Setup instanced model positions
-//     uniformDataOffscreen.instancePos[0] = glm::vec4(0.0f);
-//     uniformDataOffscreen.instancePos[1] = glm::vec4(-7.0f, 0.0, -4.0f, 0.0f);
-//     uniformDataOffscreen.instancePos[2] = glm::vec4(4.0f, 0.0, -6.0f, 0.0f);
-// }
 
 // void voko::setupDescriptors()
 // {
@@ -1041,4 +985,12 @@ voko::~voko()
 	{
         SDL_DestroyWindow(SDLWindow);
 	}
+
+    // Clean up Vulkan resources
+    swapChain.cleanup();
+    if (descriptorPool != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+    }
+    
 }

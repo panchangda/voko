@@ -22,3 +22,17 @@ void Mesh::draw_mesh()
 {
     
 }
+
+void Mesh::draw_mesh(VkCommandBuffer cmdBuffer)
+{
+    size_t instanceCount = MeshInstanceSSBO.size();
+    if(instanceCount > 0)
+    {
+        VkGltfModel.bindBuffers(cmdBuffer);
+        vkCmdDrawIndexed(cmdBuffer, VkGltfModel.indices.count, 3, 0, 0, 0);
+    }else
+    {
+        VkGltfModel.draw(cmdBuffer);
+    }
+    
+}

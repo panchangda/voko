@@ -17,7 +17,7 @@ class Mesh : public Component
 public:
     Mesh(const std::string &name);
 
-    virtual ~Mesh(){};
+    virtual ~Mesh() override = default;
 
     virtual std::type_index get_type() override;
 

@@ -43,7 +43,6 @@
 #define DEFAULT_FENCE_TIMEOUT 100000000000
 
 
-
 // Global vars:
 constexpr int LIGHT_MAX = 3;
 inline int LIGHT_COUNT = 3;
@@ -60,8 +59,7 @@ public:
     uint32_t frameCounter = 0;
     bool prepared = false;
     
-    uint32_t width = 1280;
-    uint32_t height = 720;
+
     void windowResize();
     virtual void render();
 
@@ -176,7 +174,7 @@ public:
     void loadScene();
     void collectMeshes();
     void buildMeshesSSBO();
-    std::vector<Mesh*> SceneMeshes;
+
     void prepareSceneUniformBuffer();
     // Deferred Shadow Vars & Funcs
     int32_t debugDisplayTarget = 0;
@@ -203,7 +201,11 @@ public:
 
     void initVulkan();
 
+    // initVulkan calls to below functions
     VkResult createInstance();
+    VkResult createPhysicalDevice();
+    VkResult createDeviceAndQueueAndCommandPool(VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char*> enabledExtensions, void* pNextChain, bool useSwapChain = true, VkQueueFlags requestedQueueTypes = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
+
 
     struct {
         bool left = false;
@@ -257,10 +259,7 @@ public:
     {
         return (std::find(supportedDeviceExtensions.begin(), supportedDeviceExtensions.end(), extension) != supportedDeviceExtensions.end());
     }
-    VkResult createPhysicalDevice();
-    
-    VkResult createDeviceAndQueueAndCommandPool(VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char*> enabledExtensions, void* pNextChain, bool useSwapChain = true, VkQueueFlags requestedQueueTypes = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
-
+   
     /** @brief Encapsulated physical and logical vulkan device */
     vks::VulkanDevice *vulkanDevice;
     /** @brief Logical device, application's view of the physical device (GPU) */
@@ -275,12 +274,7 @@ public:
     std::vector<VkCommandBuffer> drawCmdBuffers;
     // Contains command buffers and semaphores to be presented to the queue
     VkSubmitInfo submitInfo;
-    // Global render pass for frame buffer writes
-    VkRenderPass renderPass{ VK_NULL_HANDLE };
-    // List of available frame buffers (same as number of swap chain images)
-    std::vector<VkFramebuffer>frameBuffers;
-    // Active frame buffer index
-    uint32_t currentBuffer = 0;
+
     // Descriptor set pool
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     // List of shader modules created (stored for cleanup)
@@ -349,8 +343,7 @@ public:
     }uniformBufferScene;
 
     VkDescriptorPool SceneDescriptorPool;
-    VkDescriptorSetLayout SceneDescriptorSetLayout;
-    VkDescriptorSet SceneDescriptorSet;
+
     vks::Buffer SceneUB;
     
     void CreateSceneDescriptor();
@@ -360,8 +353,7 @@ public:
 
     
     VkDescriptorPool PerMeshDescriptorPool;
-    VkDescriptorSetLayout PerMeshDescriptorSetLayout;
-    std::vector<VkDescriptorSet> PerMeshDescriptorSets;
+
     void CreatePerMeshDescriptor();
     void CreateAndUploadMeshSSBO(vks::Buffer& MeshSSBO, uint32_t MeshSSBOSize, uint32_t MeshIndex);
 

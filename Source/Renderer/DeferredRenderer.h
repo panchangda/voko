@@ -5,20 +5,15 @@ class DeferredRenderer : public SceneRenderer
 {
 public:
     DeferredRenderer(vks::VulkanDevice* inVulkanDeivce,
-    const std::vector<Mesh*>& sceneMeshes,
-    VkDescriptorSetLayout inSceneDsLayout,
-    VkDescriptorSet inSceneDS,
-    VkDescriptorSetLayout inPerMeshDsLayout,
-    const std::vector<VkDescriptorSet>& inPerMeshDSs,
     VkSemaphore inPresentComplete,
     VkSemaphore inRenderComplete,
     VkQueue inGfxQueue);
     
-    virtual ~DeferredRenderer() = default;
+    virtual ~DeferredRenderer() override = default;
     
     virtual void Render() override;
 
-    std::vector< std::unique_ptr<RenderPass> > RenderPasses;
+    std::vector< std::shared_ptr<RenderPass> > RenderPasses;
 
     // Capsulated vks device ptr
     vks::VulkanDevice* vulkanDevice;
@@ -29,11 +24,6 @@ public:
     VkSemaphore presentComplete;
     VkSemaphore renderComplete;
     VkQueue gfxQueue;
-
-    VkDescriptorSetLayout sceneDescriptorSetLayout;
-    VkDescriptorSet sceneDescriptorSet;
-    VkDescriptorSetLayout perMeshDescriptorSetLayout;
-    std::vector<VkDescriptorSet> perMeshDescriptorSets;
 };
 
 

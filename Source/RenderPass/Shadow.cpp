@@ -2,19 +2,26 @@
 
 #include <array>
 
+#include "voko_globals.h"
 #include "VulkanFrameBuffer.hpp"
 
 // Declared in voko.h
 extern int LIGHT_COUNT;
 
-ShadowPass::ShadowPass(vks::VulkanDevice* inVulkanDevice): RenderPass(inVulkanDevice)
+
+ShadowPass::ShadowPass(const std::string& name, vks::VulkanDevice* inVulkanDevice, uint32_t inWidth, uint32_t inHeight,
+                       ERenderPassType inPassType, EPassAttachmentType inAttachmentType,
+                       // Shadow Pass Specials:
+                       float inDepthBiasConstant,
+                       float inDepthBiasSlope):
+    RenderPass(name, inVulkanDevice, inWidth, inHeight, inPassType, inAttachmentType),
+    // Shadow Pass Specials:
+    depthBiasConstant(inDepthBiasConstant), depthBiasSlope(inDepthBiasSlope)
 {
-    VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {};
-    pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-    VK_CHECK_RESULT(vkCreatePipelineCache(inVulkanDevice->logicalDevice, &pipelineCacheCreateInfo, nullptr, &pipelineCache));
+    init();
 }
 
-void ShadowPass::setupFrameBuffer(int width, int height)
+void ShadowPass::setupFrameBuffer()
 {
     frameBuffer = new vks::Framebuffer(vulkanDevice);
 
@@ -55,19 +62,22 @@ void ShadowPass::setupFrameBuffer(int width, int height)
     VK_CHECK_RESULT(frameBuffer->createRenderPass());
 }
 
-void ShadowPass::createDescriptorSet()
+void ShadowPass::setupDescriptorSet()
 {
-    
-}
-
-void ShadowPass::preparePipeline()
-{
-    std::array<VkDescriptorSetLayout ,2> shadowDsLayouts = {sceneDescriptorSetLayout, perMeshDescriptorSetLayout};
+    std::array<VkDescriptorSetLayout ,2> shadowDsLayouts = {voko_global::SceneDescriptorSetLayout, voko_global::PerMeshDescriptorSetLayout};
     // Layout
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(
         shadowDsLayouts.data(), static_cast<uint32_t>(shadowDsLayouts.size()));
     VK_CHECK_RESULT(
         vkCreatePipelineLayout(vulkanDevice->logicalDevice, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout));
+}
+
+
+void ShadowPass::preparePipeline()
+{
+    // Shader Paths:
+    std::string VSPath = "deferredshadows/shadow.vert.spv";
+    std::string PSPath = "deferredshadows/shadow.geom.spv";
 
     // Shadow mapping pipeline
     // The shadow mapping pipeline uses geometry shader instancing (invocations layout modifier) to output
@@ -92,9 +102,9 @@ void ShadowPass::preparePipeline()
     VkPipelineDynamicStateCreateInfo dynamicState = vks::initializers::pipelineDynamicStateCreateInfo(
         dynamicStateEnables);
     std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages;
-    shaderStages[0] = vks::tools::loadShader(getShaderBasePath() + "deferredshadows/shadow.vert.spv",
+    shaderStages[0] = vks::tools::loadShader(getShaderBasePath() + VSPath,
                                              VK_SHADER_STAGE_VERTEX_BIT, vulkanDevice->logicalDevice);
-    shaderStages[1] = vks::tools::loadShader(getShaderBasePath() + "deferredshadows/shadow.geom.spv",
+    shaderStages[1] = vks::tools::loadShader(getShaderBasePath() + PSPath,
                                              VK_SHADER_STAGE_GEOMETRY_BIT, vulkanDevice->logicalDevice);
 
     VkGraphicsPipelineCreateInfo pipelineCI = vks::initializers::pipelineCreateInfo(
@@ -109,12 +119,16 @@ void ShadowPass::preparePipeline()
     pipelineCI.stageCount = static_cast<uint32_t>(shaderStages.size());
     pipelineCI.pStages = shaderStages.data();
 
+    // Vertex input state from glTF model for pipeline rendering models
+    pipelineCI.pVertexInputState = vkglTF::Vertex::getPipelineVertexInputState({ vkglTF::VertexComponent::Position, vkglTF::VertexComponent::UV, vkglTF::VertexComponent::Color, vkglTF::VertexComponent::Normal, vkglTF::VertexComponent::Tangent });
     
     // Cull front faces
     rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
     depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+
     // Enable depth bias
     rasterizationState.depthBiasEnable = VK_TRUE;
+
     // Add depth bias to dynamic state, so we can change it at runtime
     dynamicStateEnables.push_back(VK_DYNAMIC_STATE_DEPTH_BIAS);
     dynamicState = vks::initializers::pipelineDynamicStateCreateInfo(dynamicStateEnables);
@@ -123,7 +137,7 @@ void ShadowPass::preparePipeline()
         vkCreateGraphicsPipelines(vulkanDevice->logicalDevice, pipelineCache, 1, &pipelineCI, nullptr, &pipeline));
 }
 
-void ShadowPass::buildCommandBuffer(const std::vector<Mesh*>& sceneMeshes)
+void ShadowPass::buildCommandBuffer()
 {
     if (cmdBuffer == VK_NULL_HANDLE)
     {
@@ -174,13 +188,13 @@ void ShadowPass::buildCommandBuffer(const std::vector<Mesh*>& sceneMeshes)
     vkCmdBeginRenderPass(cmdBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     // Bind Scene Ds
-    vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &sceneDescriptorSet, 0 , NULL);
+    vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &voko_global::SceneDescriptorSet, 0 , NULL);
     
-    for (int Mesh_Index = 0; Mesh_Index < sceneMeshes.size(); Mesh_Index++)
+    for (int Mesh_Index = 0; Mesh_Index < voko_global::SceneMeshes.size(); Mesh_Index++)
     {
-        const auto mesh = sceneMeshes[Mesh_Index];
+        const auto mesh = voko_global::SceneMeshes[Mesh_Index];
         // Bind Per Mesh Ds
-        vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &perMeshDescriptorSets[Mesh_Index], 0, NULL);
+        vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &voko_global::PerMeshDescriptorSets[Mesh_Index], 0, NULL);
         mesh->draw_mesh(cmdBuffer);
     }
     

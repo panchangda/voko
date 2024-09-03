@@ -4,7 +4,7 @@
 #define VMA_IMPLEMENTATION 
 #include <vk_mem_alloc.h>
 
-
+#include "voko_globals.h"
 
 #include "VulkanglTFModel.h"
 #include "SceneGraph/Light.h"
@@ -41,7 +41,7 @@ void voko::prepare()
     camera.rotationSpeed = 0.25f;
     camera.position = { 2.15f, 0.3f, -8.75f };
     camera.setRotation(glm::vec3(-0.75f, 12.5f, 0.0f));
-    camera.setPerspective(60.0f, (float)width / (float)height, zNear, zFar);
+    camera.setPerspective(60.0f, (float)voko_global::width / (float)voko_global::height, zNear, zFar);
     timerSpeed *= 0.25f;
     
     // Load Assets & Create Scene graph
@@ -58,11 +58,6 @@ void voko::prepare()
     // Scene Renderer
     SceneRenderer = new DeferredRenderer(
         vulkanDevice,
-        SceneMeshes,
-        SceneDescriptorSetLayout,
-        SceneDescriptorSet,
-        PerMeshDescriptorSetLayout,
-        PerMeshDescriptorSets,
         semaphores.presentComplete,
         semaphores.renderComplete,
         queue);
@@ -263,14 +258,14 @@ void voko::loadScene()
 
 void voko::collectMeshes()
 {
-    SceneMeshes = CurrentScene->get_components<Mesh>();
+    voko_global::SceneMeshes = CurrentScene->get_components<Mesh>();
 }
 
 void voko::buildMeshesSSBO()
 {
-    for(int Mesh_Index=0;Mesh_Index<SceneMeshes.size();Mesh_Index++)
+    for(int Mesh_Index=0;Mesh_Index< voko_global::SceneMeshes.size();Mesh_Index++)
     {
-        auto const mesh = SceneMeshes[Mesh_Index];
+        auto const mesh = voko_global::SceneMeshes[Mesh_Index];
         int meshInstanceCount = mesh->MeshInstanceSSBO.size();
         if(meshInstanceCount > 0)
         {
@@ -338,7 +333,7 @@ void voko::nextFrame()
 void voko::prepareFrame()
 {
     // Acquire the next image from the swap chain
-    VkResult result = swapChain.acquireNextImage(semaphores.presentComplete, &currentBuffer);
+    VkResult result = swapChain.acquireNextImage(semaphores.presentComplete, &voko_global::currentBuffer);
     // Recreate the swapchain if it's no longer compatible with the surface (OUT_OF_DATE)
     // SRS - If no longer optimal (VK_SUBOPTIMAL_KHR), wait until submitFrame() in case number of swapchain images will change on resize
     if ((result == VK_ERROR_OUT_OF_DATE_KHR) || (result == VK_SUBOPTIMAL_KHR)) {
@@ -355,7 +350,7 @@ void voko::prepareFrame()
 void voko::submitFrame()
 {
 
-    VkResult result = swapChain.queuePresent(queue, currentBuffer, semaphores.renderComplete);
+    VkResult result = swapChain.queuePresent(queue, voko_global::currentBuffer, semaphores.renderComplete);
     // Recreate the swapchain if it's no longer compatible with the surface (OUT_OF_DATE) or no longer optimal for presentation (SUBOPTIMAL)
     if ((result == VK_ERROR_OUT_OF_DATE_KHR) || (result == VK_SUBOPTIMAL_KHR)) {
         windowResize();
@@ -541,17 +536,17 @@ void voko::CreateSceneDescriptor()
         vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS, 0)
     };
     VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &SceneDescriptorSetLayout));
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &voko_global::SceneDescriptorSetLayout));
 
     // Sets
     std::vector<VkWriteDescriptorSet> writeDescriptorSets;
-    VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(SceneDescriptorPool, &SceneDescriptorSetLayout, 1);
+    VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(SceneDescriptorPool, &voko_global::SceneDescriptorSetLayout, 1);
     
     // mapping 
-    VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &SceneDescriptorSet));
+    VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &voko_global::SceneDescriptorSet));
     writeDescriptorSets = {
         // Binding 0: Vertex shader uniform buffer
-        vks::initializers::writeDescriptorSet(SceneDescriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &SceneUB.descriptor),
+        vks::initializers::writeDescriptorSet(voko_global::SceneDescriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &SceneUB.descriptor),
     };
     vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
 }
@@ -614,15 +609,15 @@ void voko::CreatePerMeshDescriptor()
         vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0)
     };
     VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &PerMeshDescriptorSetLayout));
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &voko_global::PerMeshDescriptorSetLayout));
 
 
-    PerMeshDescriptorSets.resize(MESH_MAX);
+    voko_global::PerMeshDescriptorSets.resize(MESH_MAX);
     for(int Mesh_Index = 0; Mesh_Index < MESH_MAX; Mesh_Index++)
     {
         // pre allocate ds for meshes
-        VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(PerMeshDescriptorPool, &PerMeshDescriptorSetLayout, 1);
-        VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &PerMeshDescriptorSets[Mesh_Index]));
+        VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(PerMeshDescriptorPool, &voko_global::PerMeshDescriptorSetLayout, 1);
+        VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &voko_global::PerMeshDescriptorSets[Mesh_Index]));
     }
 }
 
@@ -639,7 +634,7 @@ void voko::CreateAndUploadMeshSSBO(vks::Buffer& MeshSSBO, uint32_t MeshSSBOSize,
     std::vector<VkWriteDescriptorSet> writeDescriptorSets;
     writeDescriptorSets = {
         // Binding 0: Mesh Instance Buffer
-        vks::initializers::writeDescriptorSet(PerMeshDescriptorSets[MeshIndex], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 0, &MeshSSBO.descriptor),
+        vks::initializers::writeDescriptorSet(voko_global::PerMeshDescriptorSets[MeshIndex], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 0, &MeshSSBO.descriptor),
     };
     vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
     

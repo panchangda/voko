@@ -1,4 +1,5 @@
 #include "voko.h"
+#include "voko_globals.h"
 
 void voko::initSwapChain()
 {
@@ -29,7 +30,7 @@ void voko::createCommandPool()
 
 void voko::setupSwapChain()
 {
-    swapChain.create(&width, &height, settings.vsync, settings.fullscreen);
+    swapChain.create(&voko_global::width, &voko_global::height, settings.vsync, settings.fullscreen);
 }
 
 void voko::createCommandBuffers()
@@ -63,7 +64,7 @@ void voko::setupDepthStencil()
     imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageCI.imageType = VK_IMAGE_TYPE_2D;
     imageCI.format = depthFormat;
-    imageCI.extent = { width, height, 1 };
+    imageCI.extent = { voko_global::width, voko_global::height, 1 };
     imageCI.mipLevels = 1;
     imageCI.arrayLayers = 1;
     imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -167,7 +168,7 @@ void voko::setupRenderPass()
 	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 	renderPassInfo.pDependencies = dependencies.data();
 
-	VK_CHECK_RESULT(vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass));
+	VK_CHECK_RESULT(vkCreateRenderPass(device, &renderPassInfo, nullptr, &voko_global::renderPass));
 }
 
 void voko::createPipelineCache()
@@ -187,19 +188,19 @@ void voko::setupFrameBuffer()
     VkFramebufferCreateInfo frameBufferCreateInfo = {};
     frameBufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     frameBufferCreateInfo.pNext = NULL;
-    frameBufferCreateInfo.renderPass = renderPass;
+    frameBufferCreateInfo.renderPass = voko_global::renderPass;
     frameBufferCreateInfo.attachmentCount = 2;
     frameBufferCreateInfo.pAttachments = attachments;
-    frameBufferCreateInfo.width = width;
-    frameBufferCreateInfo.height = height;
+    frameBufferCreateInfo.width = voko_global::width;
+    frameBufferCreateInfo.height = voko_global::height;
     frameBufferCreateInfo.layers = 1;
 
     // Create frame buffers for every swap chain image
-    frameBuffers.resize(swapChain.imageCount);
-    for (uint32_t i = 0; i < frameBuffers.size(); i++)
+    voko_global::frameBuffers.resize(swapChain.imageCount);
+    for (uint32_t i = 0; i < voko_global::frameBuffers.size(); i++)
     {
         attachments[0] = swapChain.buffers[i].view;
-        VK_CHECK_RESULT(vkCreateFramebuffer(device, &frameBufferCreateInfo, nullptr, &frameBuffers[i]));
+        VK_CHECK_RESULT(vkCreateFramebuffer(device, &frameBufferCreateInfo, nullptr, &voko_global::frameBuffers[i]));
     }
 }
 

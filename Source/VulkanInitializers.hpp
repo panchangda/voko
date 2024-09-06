@@ -322,7 +322,13 @@ namespace vks
 			descriptorImageInfo.imageLayout = imageLayout;
 			return descriptorImageInfo;
 		}
-
+		inline VkDescriptorBufferInfo emptyDescriptorBufferInfo(){
+			VkDescriptorBufferInfo descriptor{};
+			descriptor.buffer = VK_NULL_HANDLE;
+			descriptor.offset = 0;
+			descriptor.range = VK_WHOLE_SIZE;
+			return descriptor;
+		}
 		inline VkWriteDescriptorSet writeDescriptorSet(
 			VkDescriptorSet dstSet,
 			VkDescriptorType type,

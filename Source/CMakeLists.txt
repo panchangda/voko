@@ -4,6 +4,24 @@
 file(GLOB_RECURSE ALL_SOURCE_FILES "*.cpp" "*.hpp" "*.h")
 
 
+# 保留相对目录结构
+foreach(file ${ALL_SOURCE_FILES})
+  # 获取文件的相对路径（相对于 Source 目录）
+  file(RELATIVE_PATH relative_file ${CMAKE_CURRENT_SOURCE_DIR} ${file})
+  
+  # 打印相对路径，调试用
+  #message(STATUS "Relative file: ${relative_file}")
+  
+  # 获取文件的目录（用于分组）
+  get_filename_component(file_path ${relative_file} PATH)
+  
+  # 打印文件目录路径，调试用
+  #message(STATUS "File path: ${file_path}")
+  
+  # 创建 source_group，这样 Visual Studio 中将显示文件的相对路径
+  source_group(${file_path} FILES ${file})
+endforeach()
+
 
 add_executable(${EXECUTABLE_NAME} ${ALL_SOURCE_FILES})
 

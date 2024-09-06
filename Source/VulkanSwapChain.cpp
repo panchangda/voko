@@ -195,7 +195,7 @@ void VulkanSwapChain::initSurface(screen_context_t screen_context, screen_window
 
 /**
  * \brief 
- * \param _surface implemented by voko ext, init swapchain with sdl created surface
+ * \param _surface implemented by voko, init swapchain with sdl created surface
  */
 void VulkanSwapChain::vokoInitSwapChain(VkSurfaceKHR _surface)
 {

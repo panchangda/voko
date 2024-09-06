@@ -1,4 +1,5 @@
 #include "voko.h"
+#include "voko_globals.h"
 
 // This function is used to request a device memory type that supports all the property flags we request (e.g. device local, host visible)
 // Upon success it will return the index of the memory type that fits our requested memory properties
@@ -187,7 +188,7 @@ void voko::createVertexBuffer()
 
     VkCommandBufferAllocateInfo cmdBufAllocateInfo{};
     cmdBufAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cmdBufAllocateInfo.commandPool = commandPool;
+    cmdBufAllocateInfo.commandPool = voko_global::commandPool;
     cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     cmdBufAllocateInfo.commandBufferCount = 1;
     VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &copyCmd));
@@ -224,7 +225,7 @@ void voko::createVertexBuffer()
     VK_CHECK_RESULT(vkWaitForFences(device, 1, &fence, VK_TRUE, DEFAULT_FENCE_TIMEOUT));
 
     vkDestroyFence(device, fence, nullptr);
-    vkFreeCommandBuffers(device, commandPool, 1, &copyCmd);
+    vkFreeCommandBuffers(device, voko_global::commandPool, 1, &copyCmd);
 
     // Destroy staging buffers
     // Note: Staging buffer must not be deleted before the copies have been submitted and executed
@@ -368,7 +369,7 @@ void voko::createPipelines()
     // The layout used for this pipeline (can be shared among multiple pipelines using the same layout)
     pipelineCI.layout = pipelineLayout;
     // Renderpass this pipeline is attached to
-    pipelineCI.renderPass = renderPass;
+    pipelineCI.renderPass = voko_global::renderPass;
 
     // Construct the different states making up the pipeline
 

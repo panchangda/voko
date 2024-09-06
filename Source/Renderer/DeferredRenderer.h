@@ -20,7 +20,7 @@ public:
     
     // Contains command buffers and semaphores to be presented to the queue
     VkSubmitInfo submitInfo;
-
+    VkPipelineStageFlags defaultSubmitPipelineStageFlags;
     VkSemaphore presentComplete;
     VkSemaphore renderComplete;
     VkQueue gfxQueue;

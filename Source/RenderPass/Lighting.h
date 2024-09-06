@@ -12,7 +12,8 @@ public:
                         ERenderPassType inPassType,
                         EPassAttachmentType inAttachmentType,
                 // Lighting pass specials:
-                std::shared_ptr<RenderPass> ShadowPass);
+                std::shared_ptr<RenderPass> ShadowPass,
+                std::shared_ptr<RenderPass> GeometryPass);
     virtual ~LightingPass() override = default;
     virtual void setupFrameBuffer() override;
     virtual void setupDescriptorSet() override;
@@ -21,5 +22,6 @@ public:
 
 private:
     std::shared_ptr<RenderPass> m_ShadowPass;
+    std::shared_ptr<RenderPass> m_GeometryPass;
 };
 

@@ -1,7 +1,7 @@
 #version 450
 
-layout (binding = 1) uniform sampler2D samplerColor;
-layout (binding = 2) uniform sampler2D samplerNormalMap;
+#extension GL_ARB_shading_language_include : require
+#include "../util/mesh.vh"
 
 layout (location = 0) in vec3 inNormal;
 layout (location = 1) in vec2 inUV;

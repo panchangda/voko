@@ -24,17 +24,9 @@ ShadowPass::ShadowPass(const std::string& name, vks::VulkanDevice* inVulkanDevic
 void ShadowPass::setupFrameBuffer()
 {
     frameBuffer = new vks::Framebuffer(vulkanDevice);
-
-    // Shadowmap properties
-#if defined(__ANDROID__)
-    // Use smaller shadow maps on mobile due to performance reasons
-    frameBuffer->width = 1024;
-    frameBuffer->height = 1024;
-#else
     frameBuffer->width = width;
     frameBuffer->height = height;
-#endif
-
+    
     // Find a suitable depth format
     VkFormat shadowMapFormat;
 
@@ -77,7 +69,7 @@ void ShadowPass::preparePipeline()
 {
     // Shader Paths:
     std::string VSPath = "deferredshadows/shadow.vert.spv";
-    std::string PSPath = "deferredshadows/shadow.geom.spv";
+    std::string GSPath = "deferredshadows/shadow.geom.spv";
 
     // Shadow mapping pipeline
     // The shadow mapping pipeline uses geometry shader instancing (invocations layout modifier) to output
@@ -104,7 +96,7 @@ void ShadowPass::preparePipeline()
     std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages;
     shaderStages[0] = vks::tools::loadShader(getShaderBasePath() + VSPath,
                                              VK_SHADER_STAGE_VERTEX_BIT, vulkanDevice->logicalDevice);
-    shaderStages[1] = vks::tools::loadShader(getShaderBasePath() + PSPath,
+    shaderStages[1] = vks::tools::loadShader(getShaderBasePath() + GSPath,
                                              VK_SHADER_STAGE_GEOMETRY_BIT, vulkanDevice->logicalDevice);
 
     VkGraphicsPipelineCreateInfo pipelineCI = vks::initializers::pipelineCreateInfo(
@@ -139,20 +131,9 @@ void ShadowPass::preparePipeline()
 
 void ShadowPass::buildCommandBuffer()
 {
-    if (cmdBuffer == VK_NULL_HANDLE)
-    {
-        cmdBuffer = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, false);
-    }
-
-    if (passSemaphore == VK_NULL_HANDLE)
-    {
-        VkSemaphoreCreateInfo semaphoreCreateInfo = vks::initializers::semaphoreCreateInfo();
-        VK_CHECK_RESULT(vkCreateSemaphore(vulkanDevice->logicalDevice, &semaphoreCreateInfo, nullptr, &passSemaphore));
-    }
 
     VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
-
-
+    
     VkRenderPassBeginInfo renderPassBeginInfo = vks::initializers::renderPassBeginInfo();
     std::array<VkClearValue, 2> clearValues = {};
     VkViewport viewport;
@@ -190,13 +171,7 @@ void ShadowPass::buildCommandBuffer()
     // Bind Scene Ds
     vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &voko_global::SceneDescriptorSet, 0 , NULL);
     
-    for (int Mesh_Index = 0; Mesh_Index < voko_global::SceneMeshes.size(); Mesh_Index++)
-    {
-        const auto mesh = voko_global::SceneMeshes[Mesh_Index];
-        // Bind Per Mesh Ds
-        vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &voko_global::PerMeshDescriptorSets[Mesh_Index], 0, NULL);
-        mesh->draw_mesh(cmdBuffer);
-    }
+    RenderScene();
     
     // Ending the render pass will add an implicit barrier transitioning the frame buffer color attachment to
     // VK_IMAGE_LAYOUT_PRESENT_SRC_KHR for presenting it to the windowing system

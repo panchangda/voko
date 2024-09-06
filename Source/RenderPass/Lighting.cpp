@@ -5,22 +5,36 @@
 LightingPass::LightingPass(const std::string& name, vks::VulkanDevice* inVulkanDevice, uint32_t inWidth, uint32_t inHeight,
                            ERenderPassType inPassType, EPassAttachmentType inAttachmentType,
                            // Lighting pass specials:
-                           std::shared_ptr<RenderPass> ShadowPass):
+                           std::shared_ptr<RenderPass> ShadowPass,
+                           std::shared_ptr<RenderPass> GeometryPass):
 RenderPass(name, inVulkanDevice, inWidth, inHeight, inPassType, inAttachmentType),
-m_ShadowPass(ShadowPass)
+m_ShadowPass(ShadowPass), m_GeometryPass(GeometryPass)
 {
-    init();
+	if(ShadowPass)
+	{
+		init();
+	}else
+	{
+		std::cerr << "Lighing Pass Init Failed! No Valid ShadowPass Ptr" << std::endl;
+	}
+    
 }
 
 void LightingPass::setupFrameBuffer()
 {
-    // Use global scene framebuffers, no need for pass setup
+    // Use global scene framebuffer & render pass, no need for pass setup
 }
 
 void LightingPass::setupDescriptorSet()
 {
 	// Declare ds layouts && pipeline layouts
 	std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
+		// Binding 1: Position texture
+		vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1),
+		// Binding 2: Normals texture
+		vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2),
+		// Binding 3: Albedo texture
+		vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3),
 		// Binding 5: Shadow map
 		vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 5)
 	};
@@ -53,6 +67,24 @@ void LightingPass::setupDescriptorSet()
 	// update ds
 	
 	// Image descriptors for the offscreen color attachments
+	VkDescriptorImageInfo texDescriptorPosition =
+		vks::initializers::descriptorImageInfo(
+			m_GeometryPass->getFrameBuffer()->sampler,
+			m_GeometryPass->getFrameBuffer()->attachments[0].view,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	VkDescriptorImageInfo texDescriptorNormal =
+		vks::initializers::descriptorImageInfo(
+			m_GeometryPass->getFrameBuffer()->sampler,
+			m_GeometryPass->getFrameBuffer()->attachments[1].view,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	VkDescriptorImageInfo texDescriptorAlbedo =
+		vks::initializers::descriptorImageInfo(
+			m_GeometryPass->getFrameBuffer()->sampler,
+			m_GeometryPass->getFrameBuffer()->attachments[2].view,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
 	VkDescriptorImageInfo texDescriptorShadowMap =
 	vks::initializers::descriptorImageInfo(
 		m_ShadowPass->getFrameBuffer()->sampler,
@@ -61,8 +93,14 @@ void LightingPass::setupDescriptorSet()
 	
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets;
 	writeDescriptorSets = {
+		// Binding 1: World space position texture
+		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, &texDescriptorPosition),
+		// Binding 2: World space normals texture
+		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &texDescriptorNormal),
+		// Binding 3: Albedo texture
+		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &texDescriptorAlbedo),
 		// Binding 5: Shadow map
-		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &texDescriptorShadowMap)
+		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &texDescriptorShadowMap),
 	};
 	
 	vkUpdateDescriptorSets(vulkanDevice->logicalDevice, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
@@ -134,16 +172,14 @@ void LightingPass::buildCommandBuffer()
 
         vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        VkViewport viewport = vks::initializers::viewport((float)width, (float)height, 0.0f, 1.0f);
+        VkViewport viewport = vks::initializers::viewport((float)voko_global::width, (float)voko_global::height, 0.0f, 1.0f);
         vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
 
-        VkRect2D scissor = vks::initializers::rect2D(width, height, 0, 0);
+        VkRect2D scissor = vks::initializers::rect2D(voko_global::width, voko_global::height, 0, 0);
         vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
 
         vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
-
-        // Final composition as full screen quad
-        // Note: Also used for debug display if debugDisplayTarget > 0
+    	
         vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
 

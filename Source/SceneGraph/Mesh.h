@@ -33,8 +33,10 @@ public:
         vks::Texture2D NormalMap;
     }Textures;
 
-    vks::Buffer MeshSSBO;
-    std::vector<PerInstanceSSBO> MeshInstanceSSBO;
+    vks::Buffer meshPropSSBO;
+    vks::Buffer instanceSSBO;
+
+    std::vector<PerInstanceSSBO> Instances;
     
     void draw_mesh();
     void draw_mesh(VkCommandBuffer cmdBuffer);

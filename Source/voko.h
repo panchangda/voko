@@ -48,6 +48,7 @@ constexpr int LIGHT_MAX = 3;
 inline int LIGHT_COUNT = 3;
 constexpr int MESH_MAX = 100;
 inline int MESH_COUNT = 0;
+constexpr int MESH_SAMPLER_COUNT = 2;
 
 
 class voko{
@@ -268,8 +269,6 @@ public:
     VkQueue queue{ VK_NULL_HANDLE };
     // Depth buffer format (selected during Vulkan initialization)
     VkFormat depthFormat;
-    // Command buffer pool
-    VkCommandPool commandPool;
     // Command buffers used for rendering
     std::vector<VkCommandBuffer> drawCmdBuffers;
     // Contains command buffers and semaphores to be presented to the queue
@@ -355,8 +354,7 @@ public:
     VkDescriptorPool PerMeshDescriptorPool;
 
     void CreatePerMeshDescriptor();
-    void CreateAndUploadMeshSSBO(vks::Buffer& MeshSSBO, uint32_t MeshSSBOSize, uint32_t MeshIndex);
-
+    void CreateAndUploadPerMeshBuffer(Mesh* mesh, uint32_t MeshIndex);
     
     // require EXT dynamic uniform buffer!
     vks::Buffer meshUniformBuffer;

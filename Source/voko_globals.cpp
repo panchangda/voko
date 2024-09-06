@@ -3,7 +3,9 @@
 namespace voko_global
 {
     // ` ` only prevent multiple definition errors after c++17
-
+    
+    // Global Cmd Buffer Pool
+    VkCommandPool commandPool = {VK_NULL_HANDLE};
     // Global render pass for frame buffer writes
     VkRenderPass renderPass = {VK_NULL_HANDLE};
     // List of available frame buffers (same as number of swap chain images)

@@ -7,7 +7,8 @@
 namespace voko_global
 {
     // `inline` only prevent multiple definition errors after c++17
-    
+    // Global Cmd Buffer Pool
+    extern VkCommandPool commandPool;
     // Global render pass for frame buffer writes
     extern VkRenderPass renderPass;
     // List of available frame buffers (same as number of swap chain images)

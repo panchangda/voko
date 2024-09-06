@@ -6,13 +6,11 @@ layout (location = 2) in vec3 inColor;
 layout (location = 3) in vec3 inNormal;
 layout (location = 4) in vec4 inTangent;
 
-layout (binding = 0) uniform UBO 
-{
-	mat4 projection;
-	mat4 model;
-	mat4 view;
-	vec4 instancePos[3];
-} ubo;
+
+#extension GL_ARB_shading_language_include : require
+#include "../util/scene.vh"
+#include "../util/mesh.vh"
+
 
 layout (location = 0) out vec3 outNormal;
 layout (location = 1) out vec2 outUV;
@@ -22,17 +20,19 @@ layout (location = 4) out vec3 outTangent;
 
 void main() 
 {
-	vec4 tmpPos = vec4(inPos.xyz, 1.0) + ubo.instancePos[gl_InstanceIndex];
+	vec4 tmpPos = vec4(inPos.xyz, 1.0) + ssboInstance.instances[gl_InstanceIndex].instancePos;
 
-	gl_Position = ubo.projection * ubo.view * ubo.model * tmpPos;
+	mat4 modelMatrix = ssboMesh.modelMatrix;
+
+	gl_Position = uboScene.projectionMatrix * uboScene.viewMatrix * modelMatrix * tmpPos;
 	
 	outUV = inUV;
 
 	// Vertex position in world space
-	outWorldPos = vec3(ubo.model * tmpPos);
+	outWorldPos = vec3(modelMatrix * tmpPos);
 
 	// Normal in world space
-	mat3 mNormal = transpose(inverse(mat3(ubo.model)));
+	mat3 mNormal = transpose(inverse(mat3(modelMatrix)));
 	outNormal = mNormal * normalize(inNormal);	
 	outTangent = mNormal * normalize(inTangent.xyz);
 	

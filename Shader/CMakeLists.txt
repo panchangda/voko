@@ -11,7 +11,7 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES
     "*.frag"
     "*.vert"
     "*.comp"
-	"*.geom"
+	  "*.geom"
 )
 
 foreach(GLSL ${GLSL_SOURCE_FILES})
@@ -20,7 +20,7 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
   get_filename_component(FILE_DIR ${GLSL} DIRECTORY)
   set(SPIRV "${FILE_DIR}/${FILE_NAME}.spv")
   #message(STATUS "Building shader from ${GLSL} to ${FILE_DIR}/${FILE_NAME}.spv")
-  #message(STATUS "Command Executed: ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPRIV}")
+  #message(STATUS "Command Executed: ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}")
   add_custom_command(
     OUTPUT ${SPIRV}
     COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}

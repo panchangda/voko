@@ -1,6 +1,12 @@
 build/
 Build/
 bin/
+
+# for vscode
 .vscode/
+# for CLion
+.idea/
+cmake-build*/
+
 
 *.exe

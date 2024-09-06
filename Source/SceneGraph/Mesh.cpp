@@ -25,7 +25,7 @@ void Mesh::draw_mesh()
 
 void Mesh::draw_mesh(VkCommandBuffer cmdBuffer)
 {
-    size_t instanceCount = MeshInstanceSSBO.size();
+    size_t instanceCount = Instances.size();
     if(instanceCount > 0)
     {
         VkGltfModel.bindBuffers(cmdBuffer);
@@ -34,5 +34,4 @@ void Mesh::draw_mesh(VkCommandBuffer cmdBuffer)
     {
         VkGltfModel.draw(cmdBuffer);
     }
-    
 }

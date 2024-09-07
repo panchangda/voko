@@ -3,14 +3,15 @@
 #include <string>
 #include <vector>
 
-#include "voko_buffers.h"
-
 #include "Component.h"
 #include "Node.h"
 #include "VulkanglTFModel.h"
 #include "VulkanTexture.h"
 
-
+// forward
+namespace voko_buffer {
+    struct PerInstanceSSBO;
+}
 
 class Mesh : public Component
 {
@@ -36,7 +37,7 @@ public:
     vks::Buffer meshPropSSBO;
     vks::Buffer instanceSSBO;
 
-    std::vector<PerInstanceSSBO> Instances;
+    std::vector<voko_buffer::PerInstanceSSBO> Instances;
     
     void draw_mesh();
     void draw_mesh(VkCommandBuffer cmdBuffer);

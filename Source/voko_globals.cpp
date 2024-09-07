@@ -24,4 +24,8 @@ namespace voko_global
 
     uint32_t width = 1280;
     uint32_t height = 720;
+
+
+    int SPOT_LIGHT_COUNT = 3;
+    int MESH_COUNT = 0;
 }

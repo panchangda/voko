@@ -8,8 +8,8 @@ layout (location = 4) in vec4 inTangent;
 
 
 #extension GL_ARB_shading_language_include : require
-#include "../util/scene.vh"
-#include "../util/mesh.vh"
+#include "../util/scene.glsl"
+#include "../util/mesh.glsl"
 
 
 layout (location = 0) out vec3 outNormal;
@@ -24,7 +24,7 @@ void main()
 
 	mat4 modelMatrix = ssboMesh.modelMatrix;
 
-	gl_Position = uboScene.projectionMatrix * uboScene.viewMatrix * modelMatrix * tmpPos;
+	gl_Position = uboView.projectionMatrix * uboView.viewMatrix * modelMatrix * tmpPos;
 	
 	outUV = inUV;
 

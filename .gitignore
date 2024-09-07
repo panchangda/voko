@@ -8,5 +8,7 @@ bin/
 .idea/
 cmake-build*/
 
+# vulkan spirv shaders
+*.spv
 
 *.exe

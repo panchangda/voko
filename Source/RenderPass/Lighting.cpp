@@ -41,8 +41,11 @@ void LightingPass::setupDescriptorSet()
 	VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
 	VK_CHECK_RESULT(vkCreateDescriptorSetLayout(vulkanDevice->logicalDevice, &descriptorLayout, nullptr, &descriptorSetLayout));
 
+	// ds layouts: 0 for scene, 1 for lighting samplers
+	std::vector<VkDescriptorSetLayout> lightingDSLayout = { voko_global::SceneDescriptorSetLayout, descriptorSetLayout };
+
 	// Shared pipeline layout used by all pipelines
-	VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descriptorSetLayout, 1);
+	VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(lightingDSLayout.data(), lightingDSLayout.size());
 	VK_CHECK_RESULT(vkCreatePipelineLayout(vulkanDevice->logicalDevice, &pPipelineLayoutCreateInfo, nullptr, &pipelineLayout));
 
 
@@ -178,8 +181,11 @@ void LightingPass::buildCommandBuffer()
         VkRect2D scissor = vks::initializers::rect2D(voko_global::width, voko_global::height, 0, 0);
         vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
 
-        vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
-    	
+    	// bind scene ds
+        vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &voko_global::SceneDescriptorSet, 0, nullptr);
+    	// bind lighint pass ds
+    	vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &descriptorSet, 0, nullptr);
+
         vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
 

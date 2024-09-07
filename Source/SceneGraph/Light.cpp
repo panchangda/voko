@@ -1,7 +1,7 @@
 #include "Light.h"
 
 Light::Light(const std::string &name) :
-    Component{name}
+    Component{name}, light_type(LightType::Max)
 {}
 
 std::type_index Light::get_type()

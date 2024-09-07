@@ -2,11 +2,9 @@
 
 #include <array>
 
+#include "voko.h"
 #include "voko_globals.h"
 #include "VulkanFrameBuffer.hpp"
-
-// Declared in voko.h
-extern int LIGHT_COUNT;
 
 
 ShadowPass::ShadowPass(const std::string& name, vks::VulkanDevice* inVulkanDevice, uint32_t inWidth, uint32_t inHeight,
@@ -41,7 +39,7 @@ void ShadowPass::setupFrameBuffer()
     attachmentInfo.format = shadowMapFormat;
     attachmentInfo.width = frameBuffer->width;
     attachmentInfo.height = frameBuffer->height;
-    attachmentInfo.layerCount = LIGHT_COUNT;
+    attachmentInfo.layerCount = voko_global::SPOT_LIGHT_MAX;
     attachmentInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     frameBuffer->addAttachment(attachmentInfo);
 

@@ -1,6 +1,7 @@
 #include "Geometry.h"
-
+#include "voko_globals.h"
 #include "VulkanFrameBuffer.hpp"
+
 
 GeometryPass::GeometryPass(const std::string& name, vks::VulkanDevice* inVulkanDevice, uint32_t inWidth,
                            uint32_t inHeight, ERenderPassType inPassType, EPassAttachmentType inAttachmentType)

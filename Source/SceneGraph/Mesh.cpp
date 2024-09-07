@@ -1,4 +1,5 @@
 #include "Mesh.h"
+#include "voko_buffers.h"
 
 Mesh::Mesh(const std::string& name) : Component{name}
 {}

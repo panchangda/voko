@@ -4,12 +4,11 @@
 #define VMA_IMPLEMENTATION 
 #include <vk_mem_alloc.h>
 
-#include "voko_globals.h"
-
 #include "VulkanglTFModel.h"
 #include "SceneGraph/Light.h"
 #include "SceneGraph/Mesh.h"
 #include "Renderer/DeferredRenderer.h"
+#include "SceneGraph/SpotLight.h"
 
 void voko::init()
 {
@@ -34,8 +33,12 @@ void voko::prepare()
     setupFrameBuffer();
 
     
-    // std::cout << deviceProperties.limits.minStorageBufferOffsetAlignment << std::endl;
+    // std::cout << "device minStorageBufferOffsetAlignment: " << deviceProperties.limits.minStorageBufferOffsetAlignment << std::endl;
     // std::cout << sizeof(PerInstanceSSBO) << std::endl;
+
+    std::cout << "offset of lighting struct : " << offsetof(voko_buffer::UniformBufferScene, lighting) << std::endl;
+    std::cout << "offset of debug struct: " << offsetof(voko_buffer::UniformBufferScene, debug) << std::endl;
+
     
 
     /** Initialize: */
@@ -50,14 +53,7 @@ void voko::prepare()
     
     // Load Assets & Create Scene graph
     loadScene();
-    collectMeshes();
-
-    // Per Mesh SSBO
-    CreatePerMeshDescriptor();
-    buildMeshesSSBO();
-
-    // Scene UB
-    prepareSceneUniformBuffer();
+    buildScene();
 
     // Scene Renderer
     SceneRenderer = new DeferredRenderer(
@@ -211,9 +207,9 @@ void voko::loadScene()
     ArmorKnight->Textures.ColorMap.loadFromFile(getAssetPath() + "models/armor/colormap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
     ArmorKnight->Textures.NormalMap.loadFromFile(getAssetPath() + "models/armor/normalmap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
     // Set per instance pos for mesh instance drawing
-    ArmorKnight->Instances.push_back(PerInstanceSSBO{.instancePos = glm::vec4(0.0f)});
-    ArmorKnight->Instances.push_back(PerInstanceSSBO{.instancePos = glm::vec4(-7.0f, 0.0, -4.0f, 0.0f)});
-    ArmorKnight->Instances.push_back(PerInstanceSSBO{.instancePos = glm::vec4(4.0f, 0.0, -6.0f, 0.0f)});
+    ArmorKnight->Instances.push_back(voko_buffer::PerInstanceSSBO{.instancePos = glm::vec4(0.0f)});
+    ArmorKnight->Instances.push_back(voko_buffer::PerInstanceSSBO{.instancePos = glm::vec4(-7.0f, 0.0, -4.0f, 0.0f)});
+    ArmorKnight->Instances.push_back(voko_buffer::PerInstanceSSBO{.instancePos = glm::vec4(4.0f, 0.0, -6.0f, 0.0f)});
     ArmorKnight->set_node(*ArmorKnightMeshNode);
 
     
@@ -231,61 +227,92 @@ void voko::loadScene()
     CurrentScene->add_node(std::move(StoneFloor02Node));
 
     // Lights
-    std::vector<glm::vec3> LightPos = {
+    const std::vector<glm::vec3> spotLightPos = {
         glm::vec3(-14.0f, -0.5f, 15.0f),
         glm::vec3(14.0f, -4.0f, 12.0f),
         glm::vec3(0.0f, -10.0f, 4.0f)
     };
-    std::vector<LightProperties> LightProperties = {
-        {
-            .direction = glm::vec3(-2.0f, 0.0f, 0.0f),
-            .color = glm::vec3(1.0f, 0.5f, 0.5f)
-        },
-        {
-            .direction = glm::vec3(2.0f, 0.0f, 0.0f),
-            .color = glm::vec3(0.0f, 0.0f, 1.0f)
-        },
-        {
-            .direction = glm::vec3(0.0f, 0.0f, 0.0f),
-            .color = glm::vec3(1.0f, 1.0f, 1.0f)
-        },
+
+    const std::vector<LightProperties> spotLightProperties = {
+        LightProperties(
+            std::in_place_type<voko_buffer::SpotLight>,
+            glm::vec4(-14.0f, -0.5f, 15.0f, 1.0f), // position
+            glm::vec4(-2.0f, 0.0f, 0.0f, 0.0f), // target
+            glm::vec4(1.0f, 0.5f, 0.5f, 0.0f), // color
+            glm::mat4(1.0f), // viewMatrix
+            100.0f, // range
+            std::cos(glm::radians(15.0f)), // lightCosInnerAngle
+            std::cos(glm::radians(25.0f)) // lightCosOuterAngle
+        ),
+        LightProperties(
+            std::in_place_type<voko_buffer::SpotLight>,
+            glm::vec4(14.0f, -4.0f, 12.0f, 1.0f), // position
+            glm::vec4(2.0f, 0.0f, 0.0f, 0.0f), // target
+            glm::vec4(0.0f, 0.0f, 1.0f, 0.0f), // color
+            glm::mat4(1.0f), // viewMatrix
+            100.0f, // range
+            std::cos(glm::radians(15.0f)), // lightCosInnerAngle
+            std::cos(glm::radians(25.0f)) // lightCosOuterAngle
+        ),
+        LightProperties(
+            std::in_place_type<voko_buffer::SpotLight>,
+            glm::vec4(0.0f, -10.0f, 4.0f, 1.0f), // position
+            glm::vec4(0.0f, 0.0f, 0.0f, 0.0f), // target
+            glm::vec4(1.0f, 1.0f, 1.0f, 0.0f), // color
+            glm::mat4(1.0f), // viewMatrix
+            100.0f, // range
+            std::cos(glm::radians(15.0f)), // lightCosInnerAngle
+            std::cos(glm::radians(25.0f)) // lightCosOuterAngle
+        )
     };
     
-    for(size_t i = 0; i < LightPos.size();i++)
+    for(uint32_t i = 0; i < spotLightProperties.size();i++)
     {
-        std::unique_ptr<Light> SpotLight = std::make_unique<Light>("spotLight: "+i);
+        std::unique_ptr<SpotLight> spotLight = std::make_unique<SpotLight>("SpotLight: " + i);
         std::unique_ptr<Node> OwnerNode = std::make_unique<Node>(0, "LightNode");
         
         Transform& TF = dynamic_cast<Transform&>(OwnerNode->get_component(typeid(Transform)));
-        TF.set_translation(LightPos[i]);
+        TF.set_translation(spotLightPos[i]);
 
-        SpotLight->set_node(*OwnerNode);
-        SpotLight->set_properties(LightProperties[i]);
-        SpotLight->set_light_type(Spot);
+        spotLight->set_node(*OwnerNode);
+        spotLight->set_properties(spotLightProperties[i]);
         
         CurrentScene->add_node(std::move(OwnerNode));
-        CurrentScene->add_component(std::move(SpotLight));
+        CurrentScene->add_component(std::move(spotLight));
+
     }
 }
 
-void voko::collectMeshes()
-{
-    voko_global::SceneMeshes = CurrentScene->get_components<Mesh>();
+void voko::buildScene() {
+    buildMeshes();
+
+    buildLights();
+
+    CreateSceneUniformBuffer();
+    CreateSceneDescriptor();
 }
 
-void voko::buildMeshesSSBO()
+void voko::buildMeshes()
 {
+    CreatePerMeshDescriptor();
+
+    voko_global::SceneMeshes = CurrentScene->get_components<Mesh>();
+
     for(int Mesh_Index=0;Mesh_Index< voko_global::SceneMeshes.size();Mesh_Index++)
     {
         CreateAndUploadPerMeshBuffer(voko_global::SceneMeshes[Mesh_Index], Mesh_Index);
     }
 }
 
-void voko::prepareSceneUniformBuffer()
-{
-    CreateSceneUniformBuffer();
-    CreateSceneDescriptor();
+void voko::buildLights() {
+    auto spotLights = CurrentScene->get_components<Light>();
+    for(uint32_t i = 0; i < spotLights.size();i++) {
+        const auto spotLight = spotLights[i];
+        uniformBufferLighting.spotLights[i] = std::get<voko_buffer::SpotLight>(spotLight->get_properties());
+    }
 }
+
+
 
 
 void voko::windowResize()
@@ -332,6 +359,14 @@ void voko::nextFrame()
         {
             timer -= 1.0f;
         }
+    }
+
+    float fpsTimer = (float)(std::chrono::duration<double, std::milli>(tEnd - lastTimestamp).count());
+    if (fpsTimer > 1000.0f)
+    {
+        lastFPS = static_cast<uint32_t>((float)frameCounter * (1000.0f / fpsTimer));
+        frameCounter = 0;
+        lastTimestamp = tEnd;
     }
 }
 
@@ -478,18 +513,18 @@ void voko::renderLoop()
                 }
             }
 
-            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP)
             {
                 switch (e.button.button)
                 {
                 case SDL_BUTTON_LEFT:
-                    mouseButtons.left = true;
+                    mouseButtons.left = false;
 
                 case SDL_BUTTON_RIGHT:
-                    mouseButtons.right = true;
+                    mouseButtons.right = false;
 
                 case SDL_BUTTON_MIDDLE:
-                    mouseButtons.middle = true;
+                    mouseButtons.middle = false;
                 }
             }
             if(e.type == SDL_EVENT_MOUSE_MOTION)
@@ -497,8 +532,7 @@ void voko::renderLoop()
                 float dy = e.motion.yrel;
                 float dx = e.motion.xrel;
                 if (mouseButtons.left) {
-                    camera.rotate(glm::vec3( dy* camera.rotationSpeed, -dx * camera.rotationSpeed, 0.0f));
-
+                    camera.rotate(glm::vec3( -dy* camera.rotationSpeed, dx * camera.rotationSpeed, 0.0f));
                 }
             }
 
@@ -558,6 +592,8 @@ void voko::CreateSceneDescriptor()
 
 void voko::CreateSceneUniformBuffer()
 {
+    // std::cout << "Scene UB Size: "<< sizeof(uniformBufferScene) << std::endl;
+
     VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
      &SceneUB, sizeof(uniformBufferScene)));
 
@@ -568,33 +604,31 @@ void voko::CreateSceneUniformBuffer()
 
 void voko::UpdateSceneUniformBuffer()
 {
-    
     // Update view (camera)
-    uniformBufferScene.projectionMatrix = camera.matrices.perspective;
-    uniformBufferScene.viewMatrix = camera.matrices.view;
+    uniformBufferView.projectionMatrix = camera.matrices.perspective;
+    uniformBufferView.viewMatrix = camera.matrices.view;
 
     // why revert x&z? 
-    uniformBufferScene.cameraPos = glm::vec4(camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);;
-    memcpy(SceneUB.mapped, &uniformBufferScene, sizeof(uniformBufferScene));
+    uniformBufferView.viewPos = glm::vec4(camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);;
 
 
-    // Update lights
+    // Update spot lights
     // Animate
-    uniformBufferScene.lights[0].position.x = -14.0f + std::abs(sin(glm::radians(timer * 360.0f)) * 20.0f);
-    uniformBufferScene.lights[0].position.z = 15.0f + cos(glm::radians(timer *360.0f)) * 1.0f;
+    uniformBufferLighting.spotLights[0].position.x = -14.0f + std::abs(sin(glm::radians(timer * 360.0f)) * 20.0f);
+    uniformBufferLighting.spotLights[0].position.z = 15.0f + cos(glm::radians(timer *360.0f)) * 1.0f;
     
-    uniformBufferScene.lights[1].position.x = 14.0f - std::abs(sin(glm::radians(timer * 360.0f)) * 2.5f);
-    uniformBufferScene.lights[1].position.z = 13.0f + cos(glm::radians(timer *360.0f)) * 4.0f;
+    uniformBufferLighting.spotLights[1].position.x = 14.0f - std::abs(sin(glm::radians(timer * 360.0f)) * 2.5f);
+    uniformBufferLighting.spotLights[1].position.z = 13.0f + cos(glm::radians(timer *360.0f)) * 4.0f;
     
-    uniformBufferScene.lights[2].position.x = 0.0f + sin(glm::radians(timer *360.0f)) * 4.0f;
-    uniformBufferScene.lights[2].position.z = 4.0f + cos(glm::radians(timer *360.0f)) * 2.0f;
+    uniformBufferLighting.spotLights[2].position.x = 0.0f + sin(glm::radians(timer *360.0f)) * 4.0f;
+    uniformBufferLighting.spotLights[2].position.z = 4.0f + cos(glm::radians(timer *360.0f)) * 2.0f;
     
-    for (int i = 0; i < LIGHT_COUNT; i++) {
+    for (int i = 0; i < voko_global::SPOT_LIGHT_COUNT; i++) {
         // mvp from light's pov (for shadows)
         glm::mat4 shadowProj = glm::perspective(glm::radians(lightFOV), 1.0f, zNear, zFar);
-        glm::mat4 shadowView = glm::lookAt(glm::vec3(uniformBufferScene.lights[i].position), glm::vec3(uniformBufferScene.lights[i].target), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 shadowView = glm::lookAt(glm::vec3(uniformBufferLighting.spotLights[i].position), glm::vec3(uniformBufferLighting.spotLights[i].target), glm::vec3(0.0f, 1.0f, 0.0f));
     
-        uniformBufferScene.lights[i].viewMatrix = shadowProj * shadowView;
+        uniformBufferLighting.spotLights[i].viewMatrix = shadowProj * shadowView;
     }
     memcpy(SceneUB.mapped, &uniformBufferScene, sizeof(uniformBufferScene));
 }
@@ -604,10 +638,10 @@ void voko::CreatePerMeshDescriptor()
     // Create Per Mesh SSBO Pool
     std::vector<VkDescriptorPoolSize> poolSizes = {
         // 1 for meshPropsSSBO, 1 for meshInstanceSSBO
-        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, MESH_MAX * 2),
-        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MESH_MAX * MESH_SAMPLER_COUNT)
+        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, voko_global::MESH_MAX * 2),
+        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, voko_global::MESH_MAX * voko_global::MESH_SAMPLER_COUNT)
     };
-    VkDescriptorPoolCreateInfo descriptorPoolInfo = vks::initializers::descriptorPoolCreateInfo(poolSizes, MESH_MAX);
+    VkDescriptorPoolCreateInfo descriptorPoolInfo = vks::initializers::descriptorPoolCreateInfo(poolSizes, voko_global::MESH_MAX);
     VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &PerMeshDescriptorPool));
 
     // Declare DescriptorSet Layout    
@@ -625,8 +659,8 @@ void voko::CreatePerMeshDescriptor()
     VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &voko_global::PerMeshDescriptorSetLayout));
 
 
-    voko_global::PerMeshDescriptorSets.resize(MESH_MAX);
-    for(int Mesh_Index = 0; Mesh_Index < MESH_MAX; Mesh_Index++)
+    voko_global::PerMeshDescriptorSets.resize(voko_global::MESH_MAX);
+    for(int Mesh_Index = 0; Mesh_Index < voko_global::MESH_MAX; Mesh_Index++)
     {
         // pre allocate ds for meshes
         VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(PerMeshDescriptorPool, &voko_global::PerMeshDescriptorSetLayout, 1);
@@ -634,14 +668,14 @@ void voko::CreatePerMeshDescriptor()
     }
 }
 
-void voko::CreateAndUploadPerMeshBuffer(Mesh* mesh, uint32_t MeshIndex)
+void voko::CreateAndUploadPerMeshBuffer(Mesh* mesh, uint32_t MeshIndex) const
 {
     // 0: Mesh Prop
     vks::Buffer& meshPropSSBO = mesh->meshPropSSBO;
-    uint32_t meshPropsSSBOSize = sizeof(MeshProperty);
+    uint32_t meshPropsSSBOSize = sizeof(voko_buffer::MeshProperty);
     // 1: Mesh Instance
     vks::Buffer& instanceSSBO = mesh->instanceSSBO;
-    uint32_t instanceSSBOSize = sizeof(PerInstanceSSBO) * mesh->Instances.size();
+    uint32_t instanceSSBOSize = sizeof(voko_buffer::PerInstanceSSBO) * mesh->Instances.size();
     // 3-4: Samplers
 	vks::Texture2D& colorMap = mesh->Textures.ColorMap;
     vks::Texture2D& normalMap = mesh->Textures.NormalMap;

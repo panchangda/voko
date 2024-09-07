@@ -27,4 +27,12 @@ namespace voko_global
 
     extern uint32_t width;
     extern uint32_t height;
-}
+
+    constexpr int SPOT_LIGHT_MAX = 3;
+    constexpr int MESH_MAX = 100;
+    constexpr int MESH_SAMPLER_MAX = 12;
+    constexpr int MESH_SAMPLER_COUNT = 2;
+
+    extern int SPOT_LIGHT_COUNT;
+    extern int MESH_COUNT;
+};

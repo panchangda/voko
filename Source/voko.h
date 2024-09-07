@@ -24,6 +24,7 @@
 // self defined scene graph
 #include "SceneGraph/Scene.h"
 
+#include "voko_buffers.h"
 
 // 3rdparty
 #include <vk_mem_alloc.h>
@@ -43,12 +44,7 @@
 #define DEFAULT_FENCE_TIMEOUT 100000000000
 
 
-// Global vars:
-constexpr int LIGHT_MAX = 3;
-inline int LIGHT_COUNT = 3;
-constexpr int MESH_MAX = 100;
-inline int MESH_COUNT = 0;
-constexpr int MESH_SAMPLER_COUNT = 2;
+
 
 
 class voko{
@@ -58,6 +54,8 @@ public:
 
     // Frame counter to display fps
     uint32_t frameCounter = 0;
+    uint32_t lastFPS = 0;
+    std::chrono::time_point<std::chrono::high_resolution_clock> lastTimestamp, tPrevEnd;
     bool prepared = false;
     
 
@@ -173,14 +171,11 @@ public:
     // Scene Management
     std::unique_ptr<Scene> CurrentScene;
     void loadScene();
-    void collectMeshes();
-    void buildMeshesSSBO();
 
-    void prepareSceneUniformBuffer();
-    // Deferred Shadow Vars & Funcs
-    int32_t debugDisplayTarget = 0;
-    bool enableShadows = true;
-    
+    void buildScene();
+    void buildMeshes();
+    void buildLights();
+
 
     // Scene Renderers
     SceneRenderer* SceneRenderer;
@@ -301,60 +296,27 @@ public:
 
 
     /** Descriptor management */
-    /** Lights */
-    struct DirectionalLight
-    {
-        glm::vec3 direction;
-        glm::vec3 color;
-        // directional light range
-        glm::vec2 lr;
-        glm::vec2 tb;
-        glm::vec2 nf;
-    };
+    voko_buffer::UniformBufferScene uniformBufferScene;
 
-    struct PointLight
-    {
-        glm::vec4 position;
-        glm::vec4 color;
-        float intensity;
-        glm::mat4 viewMatrix;
-    };
-
-    struct SpotLight {
-        glm::vec4 position;
-        glm::vec4 target;
-        glm::vec4 color;
-        glm::mat4 viewMatrix;
-    };
-    
-
-    struct UniformBufferScene
-    {
-        // camera
-        glm::mat4 projectionMatrix;
-        glm::mat4 viewMatrix;
-        glm::mat4 viewProjectionMatrix;
-        glm::vec4 cameraPos;
-
-        // light
-        SpotLight lights[LIGHT_MAX];
-        
-    }uniformBufferScene;
+    voko_buffer::UniformBufferView& uniformBufferView  = uniformBufferScene.view;
+    voko_buffer::UniformBufferLighting& uniformBufferLighting  = uniformBufferScene.lighting;
+    voko_buffer::UniformBufferDebug& uniformBufferDebug  = uniformBufferScene.debug;
 
     VkDescriptorPool SceneDescriptorPool;
 
     vks::Buffer SceneUB;
-    
-    void CreateSceneDescriptor();
+
     void CreateSceneUniformBuffer();
+    void CreateSceneDescriptor();
     void UpdateSceneUniformBuffer();
 
 
     
     VkDescriptorPool PerMeshDescriptorPool;
-
+    // Allocate per mesh descriptor sets
     void CreatePerMeshDescriptor();
-    void CreateAndUploadPerMeshBuffer(Mesh* mesh, uint32_t MeshIndex);
+    // Create buffers and upload to pre-allocated corresponding sets
+    void CreateAndUploadPerMeshBuffer(Mesh* mesh, uint32_t MeshIndex) const;
     
     // require EXT dynamic uniform buffer!
     vks::Buffer meshUniformBuffer;

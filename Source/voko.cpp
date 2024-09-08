@@ -36,8 +36,8 @@ void voko::prepare()
     // std::cout << "device minStorageBufferOffsetAlignment: " << deviceProperties.limits.minStorageBufferOffsetAlignment << std::endl;
     // std::cout << sizeof(PerInstanceSSBO) << std::endl;
 
-    std::cout << "offset of lighting struct : " << offsetof(voko_buffer::UniformBufferScene, lighting) << std::endl;
-    std::cout << "offset of debug struct: " << offsetof(voko_buffer::UniformBufferScene, debug) << std::endl;
+    // std::cout << "offset of lighting struct : " << offsetof(voko_buffer::UniformBufferScene, lighting) << std::endl;
+    // std::cout << "offset of debug struct: " << offsetof(voko_buffer::UniformBufferScene, debug) << std::endl;
 
     
 
@@ -52,7 +52,8 @@ void voko::prepare()
     timerSpeed *= 0.25f;
     
     // Load Assets & Create Scene graph
-    loadScene();
+    // loadScene();
+    loadScene2();
     buildScene();
 
     // Scene Renderer
@@ -82,6 +83,12 @@ void voko::getEnabledFeatures()
     }else
     {
         vks::tools::exitFatal("Selected GPU does not support tesselation shaders!", VK_ERROR_FEATURE_NOT_PRESENT);
+    }
+
+    if (deviceFeatures.samplerAnisotropy) {
+        enabledFeatures.samplerAnisotropy = VK_TRUE;
+    }else {
+        vks::tools::exitFatal("Selected GPU does not support samplerAnisotropy!", VK_ERROR_FEATURE_NOT_PRESENT);
     }
 }
 
@@ -196,7 +203,7 @@ VkShaderModule voko::loadSPIRVShader(std::string filename)
 
 void voko::loadScene()
 {
-    CurrentScene = std::make_unique<Scene>("DefaultScene");
+    CurrentScene = std::make_unique<Scene>("Scene1: Deferred + Shadow");
     const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::PreMultiplyVertexColors | vkglTF::FileLoadingFlags::FlipY;
 
     // Meshes: model + texture
@@ -204,8 +211,8 @@ void voko::loadScene()
     std::unique_ptr<Node> ArmorKnightMeshNode = std::make_unique<Node>(0, "ArmorKnight");;
     std::unique_ptr<Mesh> ArmorKnight = std::make_unique<Mesh>("ArmorKnight");
     ArmorKnight->VkGltfModel.loadFromFile(getAssetPath() + "models/armor/armor.gltf", vulkanDevice, queue, glTFLoadingFlags);
-    ArmorKnight->Textures.ColorMap.loadFromFile(getAssetPath() + "models/armor/colormap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
-    ArmorKnight->Textures.NormalMap.loadFromFile(getAssetPath() + "models/armor/normalmap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    ArmorKnight->Textures.albedoMap.loadFromFile(getAssetPath() + "models/armor/colormap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    ArmorKnight->Textures.normalMap.loadFromFile(getAssetPath() + "models/armor/normalmap_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
     // Set per instance pos for mesh instance drawing
     ArmorKnight->Instances.push_back(voko_buffer::PerInstanceSSBO{.instancePos = glm::vec4(0.0f)});
     ArmorKnight->Instances.push_back(voko_buffer::PerInstanceSSBO{.instancePos = glm::vec4(-7.0f, 0.0, -4.0f, 0.0f)});
@@ -216,8 +223,8 @@ void voko::loadScene()
     std::unique_ptr<Node> StoneFloor02Node = std::make_unique<Node>(0, "StoneFloor02");
     std::unique_ptr<Mesh> StoneFloor02 = std::make_unique<Mesh>("StoneFloor02");
     StoneFloor02->VkGltfModel.loadFromFile(getAssetPath() + "models/deferred_box.gltf", vulkanDevice, queue, glTFLoadingFlags);
-    StoneFloor02->Textures.ColorMap.loadFromFile(getAssetPath() + "textures/stonefloor02_color_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
-    StoneFloor02->Textures.NormalMap.loadFromFile(getAssetPath() + "textures/stonefloor02_normal_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    StoneFloor02->Textures.albedoMap.loadFromFile(getAssetPath() + "textures/stonefloor02_color_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    StoneFloor02->Textures.normalMap.loadFromFile(getAssetPath() + "textures/stonefloor02_normal_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
     StoneFloor02->set_node(*StoneFloor02Node);
     
     // components are collected & managed independently, now collected by scene
@@ -279,11 +286,57 @@ void voko::loadScene()
         
         CurrentScene->add_node(std::move(OwnerNode));
         CurrentScene->add_component(std::move(spotLight));
-
     }
 }
 
+void voko::loadScene2() {
+    CurrentScene = std::make_unique<Scene>("Scene2: PBR Texture + IBL");
+    const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::PreMultiplyVertexColors | vkglTF::FileLoadingFlags::FlipY;
+
+    // cerberus mesh + pbr textures
+    std::unique_ptr<Node> cerberusNode = std::make_unique<Node>(0, "cerberus");;
+    std::unique_ptr<Mesh> cerberus = std::make_unique<Mesh>("cerberus");
+    cerberus->VkGltfModel.loadFromFile(getAssetPath() + "models/cerberus/cerberus.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    cerberus->Textures.albedoMap.loadFromFile(getAssetPath() + "models/cerberus/albedo.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    cerberus->Textures.normalMap.loadFromFile(getAssetPath() + "models/cerberus/normal.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    cerberus->Textures.aoMap.loadFromFile(getAssetPath() + "models/cerberus/ao.ktx", VK_FORMAT_R8_UNORM, vulkanDevice, queue);
+    cerberus->Textures.metallicMap.loadFromFile(getAssetPath() + "models/cerberus/metallic.ktx", VK_FORMAT_R8_UNORM, vulkanDevice, queue);
+    cerberus->Textures.roughnessMap.loadFromFile(getAssetPath() + "models/cerberus/roughness.ktx", VK_FORMAT_R8_UNORM, vulkanDevice, queue);
+    cerberus->set_node(*cerberusNode);
+    // components are collected & managed independently, now collected by scene
+    CurrentScene->add_component(std::move(cerberus));
+    CurrentScene->add_node(std::move(cerberusNode));
+
+    std::unique_ptr<Node> StoneFloor02Node = std::make_unique<Node>(0, "StoneFloor02");
+    std::unique_ptr<Mesh> StoneFloor02 = std::make_unique<Mesh>("StoneFloor02");
+    StoneFloor02->VkGltfModel.loadFromFile(getAssetPath() + "models/deferred_box.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    StoneFloor02->Textures.albedoMap.loadFromFile(getAssetPath() + "textures/stonefloor02_color_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    StoneFloor02->Textures.normalMap.loadFromFile(getAssetPath() + "textures/stonefloor02_normal_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    StoneFloor02->set_node(*StoneFloor02Node);
+    CurrentScene->add_component(std::move(StoneFloor02));
+    CurrentScene->add_node(std::move(StoneFloor02Node));
+
+
+
+    // IBL: cubes & env cube map
+    // enable IBL
+    bComputeIBL = true;
+    // cube mesh
+    skybox.loadFromFile(getAssetPath() + "models/cube.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    // environment cube map
+    iblTextures.environmentCube.loadFromFile(getAssetPath() + "textures/hdr/gcanyon_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
+}
+
 void voko::buildScene() {
+    // Precompute IBL
+    if(bComputeIBL) {
+        generateBRDFLUT();
+        generateIrradianceCube();
+        generatePrefilteredCube();
+        uniformBufferLighting.skybox = 1;
+        bComputeIBL = false;
+    }
+
     buildMeshes();
 
     buildLights();
@@ -306,10 +359,14 @@ void voko::buildMeshes()
 
 void voko::buildLights() {
     auto spotLights = CurrentScene->get_components<Light>();
+
+    voko_global::SPOT_LIGHT_COUNT = spotLights.size();
+
     for(uint32_t i = 0; i < spotLights.size();i++) {
         const auto spotLight = spotLights[i];
         uniformBufferLighting.spotLights[i] = std::get<voko_buffer::SpotLight>(spotLight->get_properties());
     }
+
 }
 
 
@@ -419,14 +476,21 @@ void voko::submitFrame()
 
 void voko::renderLoop()
 {
-
-    SDL_Event e;
     bool bQuit = false;
 
     // main loop
     while (!bQuit)
     {
-        // Handle events on queue
+        processInput(bQuit);
+
+        if (prepared) {
+            nextFrame();
+        }
+    }
+}
+void voko::processInput(bool& bQuit) {
+    SDL_Event e;
+    // Handle events on queue
         while (SDL_PollEvent(&e) != 0)
         {
             // close the window when user alt-f4s or clicks the X button
@@ -434,7 +498,7 @@ void voko::renderLoop()
             {
                 bQuit = true;
             }
-                
+
 
             if (e.type == SDL_EVENT_WINDOW_MINIMIZED)
             {
@@ -456,7 +520,7 @@ void voko::renderLoop()
                 // Move Camera
                 if (camera.type == Camera::firstperson)
                 {
-                    
+
                     switch (key_code)
                     {
                     case SDLK_W:
@@ -537,12 +601,8 @@ void voko::renderLoop()
             }
 
         }
-
-        if (prepared) {
-            nextFrame();
-        }
-    }
 }
+
 
 VkPipelineShaderStageCreateInfo voko::loadShader(std::string fileName, VkShaderStageFlagBits stage)
 {
@@ -639,7 +699,7 @@ void voko::CreatePerMeshDescriptor()
     std::vector<VkDescriptorPoolSize> poolSizes = {
         // 1 for meshPropsSSBO, 1 for meshInstanceSSBO
         vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, voko_global::MESH_MAX * 2),
-        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, voko_global::MESH_MAX * voko_global::MESH_SAMPLER_COUNT)
+        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, voko_global::MESH_MAX * voko_global::MESH_SAMPLER_MAX)
     };
     VkDescriptorPoolCreateInfo descriptorPoolInfo = vks::initializers::descriptorPoolCreateInfo(poolSizes, voko_global::MESH_MAX);
     VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &PerMeshDescriptorPool));
@@ -650,10 +710,16 @@ void voko::CreatePerMeshDescriptor()
         vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS, 0),
         // Binding 1: Mesh Instance SSBO
         vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS, 1),
-        // Binding 2: Mesh Color map
+        // Binding 2: Mesh Albedo map
         vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2),
         // Binding 3: Mesh Normal map
         vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3),
+        // Binding 4: Mesh AO map
+       vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 4),
+        // Binding 5: Mesh Metallic map
+        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 5),
+        // Binding 6: Mesh Roughness map
+       vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 6),
     };
     VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
     VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &voko_global::PerMeshDescriptorSetLayout));
@@ -677,8 +743,8 @@ void voko::CreateAndUploadPerMeshBuffer(Mesh* mesh, uint32_t MeshIndex) const
     vks::Buffer& instanceSSBO = mesh->instanceSSBO;
     uint32_t instanceSSBOSize = sizeof(voko_buffer::PerInstanceSSBO) * mesh->Instances.size();
     // 3-4: Samplers
-	vks::Texture2D& colorMap = mesh->Textures.ColorMap;
-    vks::Texture2D& normalMap = mesh->Textures.NormalMap;
+	vks::Texture2D& colorMap = mesh->Textures.albedoMap;
+    vks::Texture2D& normalMap = mesh->Textures.normalMap;
 
     // Create -> map -> upload mesh ssbo
     VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,

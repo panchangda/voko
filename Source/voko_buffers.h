@@ -95,8 +95,6 @@ namespace voko_buffer {
 
     };
 
-
-
     // View: 208 B
     struct alignas(16) UniformBufferView {
         glm::mat4 projectionMatrix;
@@ -111,6 +109,8 @@ namespace voko_buffer {
         uint32_t spotLightCount = 3;
         SpotLight spotLights[voko_global::SPOT_LIGHT_MAX];
         float ambientCoef = 0.1f;
+        uint32_t skybox = 1;
+
         // shadow
         uint32_t useShadows = 1;
         uint32_t shadowFilterMethod = 1; // 0:Fixed size shadow factor, 1:PCF, 2:PCSS

@@ -30,9 +30,13 @@ public:
     
     struct
     {
-        vks::Texture2D ColorMap;
-        vks::Texture2D NormalMap;
+        vks::Texture2D albedoMap;
+        vks::Texture2D normalMap;
+        vks::Texture2D aoMap;
+        vks::Texture2D metallicMap;
+        vks::Texture2D roughnessMap;
     }Textures;
+
 
     vks::Buffer meshPropSSBO;
     vks::Buffer instanceSSBO;

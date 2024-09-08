@@ -1,5 +1,7 @@
 #pragma once
 
+#include <fcntl.h>
+
 // vk
 #include <cassert>
 #include <vulkan/vulkan.h>
@@ -44,7 +46,9 @@
 #define DEFAULT_FENCE_TIMEOUT 100000000000
 
 
-
+namespace voko_math {
+    constexpr float M_PI = 3.14159265358979323846;   // pi
+}
 
 
 class voko{
@@ -66,6 +70,7 @@ public:
     void prepareFrame();
     void submitFrame();
     void renderLoop();
+    void processInput(bool& bQuit);
     void draw();
 
     void prepare();
@@ -170,12 +175,14 @@ public:
 
     // Scene Management
     std::unique_ptr<Scene> CurrentScene;
+
+
     void loadScene();
+    void loadScene2();
 
     void buildScene();
     void buildMeshes();
     void buildLights();
-
 
     // Scene Renderers
     SceneRenderer* SceneRenderer;
@@ -186,7 +193,22 @@ public:
     float zNear = 0.1f;
     float zFar = 64.0f;
     float lightFOV = 100.0f;
-    
+
+    // IBL
+    bool bComputeIBL;
+    struct IBLTextures {
+        vks::TextureCubeMap environmentCube;
+        // Generated at runtime
+        vks::Texture2D lutBrdf;
+        vks::TextureCubeMap irradianceCube;
+        vks::TextureCubeMap prefilteredCube;
+    }iblTextures;
+
+    vkglTF::Model skybox;
+
+    void generateBRDFLUT();
+    void generateIrradianceCube();
+    void generatePrefilteredCube();
 
 
     /* Initialization funcs & vars*/

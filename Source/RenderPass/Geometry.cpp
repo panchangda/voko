@@ -41,6 +41,18 @@ void GeometryPass::setupFrameBuffer()
     attachmentInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
     frameBuffer->addAttachment(attachmentInfo);
 
+    // Attachment 3: Metallic
+    attachmentInfo.format = VK_FORMAT_R8_UNORM;
+    frameBuffer->addAttachment(attachmentInfo);
+
+    // Attachment 4: Roughness
+    attachmentInfo.format = VK_FORMAT_R8_UNORM;
+    frameBuffer->addAttachment(attachmentInfo);
+
+    // Attachment 5: Ao
+    attachmentInfo.format = VK_FORMAT_R8_UNORM;
+    frameBuffer->addAttachment(attachmentInfo);
+
     // Depth attachment
     // Find a suitable depth format
     VkFormat attDepthFormat;
@@ -123,8 +135,11 @@ void GeometryPass::preparePipeline()
     // Blend attachment states required for all color attachments
     // This is important, as color write mask will otherwise be 0x0 and you
     // won't see anything rendered to the attachment
-    std::array<VkPipelineColorBlendAttachmentState, 3> blendAttachmentStates =
+    std::array<VkPipelineColorBlendAttachmentState, 6> blendAttachmentStates =
     {
+        vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE),
+        vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE),
+        vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE),
         vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE),
         vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE),
         vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE)
@@ -141,7 +156,7 @@ void GeometryPass::buildCommandBuffer()
     VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
     
     VkRenderPassBeginInfo renderPassBeginInfo = vks::initializers::renderPassBeginInfo();
-    std::array<VkClearValue, 4> clearValues = {};
+    std::array<VkClearValue, 7> clearValues = {};
     VkViewport viewport;
     VkRect2D scissor;
     
@@ -160,7 +175,10 @@ void GeometryPass::buildCommandBuffer()
     clearValues[0].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
     clearValues[1].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
     clearValues[2].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
-    clearValues[3].depthStencil = { 1.0f, 0 };
+    clearValues[3].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
+    clearValues[4].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
+    clearValues[5].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
+    clearValues[6].depthStencil = { 1.0f, 0 };
 
     renderPassBeginInfo.renderPass = frameBuffer->renderPass;
     renderPassBeginInfo.framebuffer = frameBuffer->framebuffer;

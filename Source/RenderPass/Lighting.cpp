@@ -29,14 +29,20 @@ void LightingPass::setupDescriptorSet()
 {
 	// Declare ds layouts && pipeline layouts
 	std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
-		// Binding 1: Position texture
+		// Binding 0: Position texture
+		vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0),
+		// Binding 1: Normals texture
 		vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1),
-		// Binding 2: Normals texture
+		// Binding 2: Albedo texture
 		vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2),
-		// Binding 3: Albedo texture
+		// Binding 3: Metallic texture
 		vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3),
-		// Binding 5: Shadow map
-		vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 5)
+		// Binding 4: Roughness texture
+		vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 4),
+		// Binding 5: AO texture
+		vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 5),
+		// Binding 6: Shadow map
+		vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 6)
 	};
 	VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
 	VK_CHECK_RESULT(vkCreateDescriptorSetLayout(vulkanDevice->logicalDevice, &descriptorLayout, nullptr, &descriptorSetLayout));
@@ -59,7 +65,7 @@ void LightingPass::setupDescriptorSet()
 		vks::initializers::descriptorPoolCreateInfo(
 			static_cast<uint32_t>(poolSizes.size()),
 			poolSizes.data(),
-			4);
+			1);
 
 	VK_CHECK_RESULT(vkCreateDescriptorPool(vulkanDevice->logicalDevice, &descriptorPoolInfo, nullptr, &descriptorPool));
 
@@ -83,10 +89,28 @@ void LightingPass::setupDescriptorSet()
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	VkDescriptorImageInfo texDescriptorAlbedo =
-		vks::initializers::descriptorImageInfo(
-			m_GeometryPass->getFrameBuffer()->sampler,
-			m_GeometryPass->getFrameBuffer()->attachments[2].view,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			vks::initializers::descriptorImageInfo(
+				m_GeometryPass->getFrameBuffer()->sampler,
+				m_GeometryPass->getFrameBuffer()->attachments[2].view,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	VkDescriptorImageInfo texDescriptorMetallic =
+			vks::initializers::descriptorImageInfo(
+				m_GeometryPass->getFrameBuffer()->sampler,
+				m_GeometryPass->getFrameBuffer()->attachments[3].view,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	VkDescriptorImageInfo texDescriptorRoughness =
+			vks::initializers::descriptorImageInfo(
+				m_GeometryPass->getFrameBuffer()->sampler,
+				m_GeometryPass->getFrameBuffer()->attachments[4].view,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	VkDescriptorImageInfo texDescriptorAO =
+			vks::initializers::descriptorImageInfo(
+				m_GeometryPass->getFrameBuffer()->sampler,
+				m_GeometryPass->getFrameBuffer()->attachments[5].view,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	VkDescriptorImageInfo texDescriptorShadowMap =
 	vks::initializers::descriptorImageInfo(
@@ -96,14 +120,20 @@ void LightingPass::setupDescriptorSet()
 	
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets;
 	writeDescriptorSets = {
-		// Binding 1: World space position texture
-		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, &texDescriptorPosition),
-		// Binding 2: World space normals texture
-		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &texDescriptorNormal),
-		// Binding 3: Albedo texture
-		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &texDescriptorAlbedo),
-		// Binding 5: Shadow map
-		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &texDescriptorShadowMap),
+		// Binding 0: World space position texture
+		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &texDescriptorPosition),
+		// Binding 1: World space normals texture
+		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, &texDescriptorNormal),
+		// Binding 2: Albedo texture
+		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &texDescriptorAlbedo),
+		// Binding 3: Metallic texture
+		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &texDescriptorMetallic),
+		// Binding 4: Roughness texture
+		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, &texDescriptorRoughness),
+		// Binding 5: AO texture
+		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &texDescriptorAO),
+		// Binding 6: Shadow map
+		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, &texDescriptorShadowMap),
 	};
 	
 	vkUpdateDescriptorSets(vulkanDevice->logicalDevice, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);

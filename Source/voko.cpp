@@ -8,6 +8,7 @@
 #include "SceneGraph/Light.h"
 #include "SceneGraph/Mesh.h"
 #include "Renderer/DeferredRenderer.h"
+#include "SceneGraph/DirectionalLight.h"
 #include "SceneGraph/SpotLight.h"
 
 void voko::init()
@@ -35,11 +36,16 @@ void voko::prepare()
     
     // std::cout << "device minStorageBufferOffsetAlignment: " << deviceProperties.limits.minStorageBufferOffsetAlignment << std::endl;
     // std::cout << sizeof(PerInstanceSSBO) << std::endl;
-
+    // // debug ubo alignment, GPU uses std140
     // std::cout << "offset of lighting struct : " << offsetof(voko_buffer::UniformBufferScene, lighting) << std::endl;
     // std::cout << "offset of debug struct: " << offsetof(voko_buffer::UniformBufferScene, debug) << std::endl;
+    // std::cout << "Offset of ambientCoef in UniformBufferScene: " <<
+    //     offsetof(voko_buffer::UniformBufferLighting, ambientCoef) + offsetof(voko_buffer::UniformBufferScene, lighting) <<  std::endl;
+    // std::cout << "Offset of shadowFilterMethod in UniformBufferLighting: "<<
+    //     offsetof(voko_buffer::UniformBufferLighting, shadowFilterMethod) + offsetof(voko_buffer::UniformBufferScene, lighting) << std::endl;
+    // std::cout << "Offset of shadowFactor in UniformBufferLighting: "<<
+    //     offsetof(voko_buffer::UniformBufferLighting, shadowFactor) + offsetof(voko_buffer::UniformBufferScene, lighting) << std::endl;
 
-    
 
     /** Initialize: */
     // Setup a default look-at camera
@@ -297,6 +303,8 @@ void voko::loadScene2() {
     std::unique_ptr<Node> cerberusNode = std::make_unique<Node>(0, "cerberus");;
     std::unique_ptr<Mesh> cerberus = std::make_unique<Mesh>("cerberus");
     cerberus->VkGltfModel.loadFromFile(getAssetPath() + "models/cerberus/cerberus.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    // cerberus has all textures
+    cerberus->meshProperty.usedSamplers = voko_global::EMeshSamplerFlags::ALL;
     cerberus->Textures.albedoMap.loadFromFile(getAssetPath() + "models/cerberus/albedo.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
     cerberus->Textures.normalMap.loadFromFile(getAssetPath() + "models/cerberus/normal.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
     cerberus->Textures.aoMap.loadFromFile(getAssetPath() + "models/cerberus/ao.ktx", VK_FORMAT_R8_UNORM, vulkanDevice, queue);
@@ -310,11 +318,33 @@ void voko::loadScene2() {
     std::unique_ptr<Node> StoneFloor02Node = std::make_unique<Node>(0, "StoneFloor02");
     std::unique_ptr<Mesh> StoneFloor02 = std::make_unique<Mesh>("StoneFloor02");
     StoneFloor02->VkGltfModel.loadFromFile(getAssetPath() + "models/deferred_box.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    // StoneFloor02 has only albedo & normal map
+    StoneFloor02->meshProperty.usedSamplers = voko_global::EMeshSamplerFlags::ALBEDO | voko_global::EMeshSamplerFlags::NORMAL;
     StoneFloor02->Textures.albedoMap.loadFromFile(getAssetPath() + "textures/stonefloor02_color_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
     StoneFloor02->Textures.normalMap.loadFromFile(getAssetPath() + "textures/stonefloor02_normal_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
     StoneFloor02->set_node(*StoneFloor02Node);
     CurrentScene->add_component(std::move(StoneFloor02));
     CurrentScene->add_node(std::move(StoneFloor02Node));
+
+    // Add 4 directional lights
+    const float p = 15.0f;
+    std::array<voko_buffer::DirectionalLight, 4> dirLights = {
+        {
+            {glm::vec4(-p, -p * 0.5f, -p, 1.0f), glm::vec4(1.0f), 1.0f},
+            {glm::vec4(-p, -p * 0.5f, p, 1.0f), glm::vec4(1.0f), 1.0f},
+            {glm::vec4(p, -p * 0.5f, p, 1.0f), glm::vec4(1.0f), 1.0f},
+            {glm::vec4(p, -p * 0.5f, -p, 1.0f), glm::vec4(1.0f), 1.0f}
+        }
+    };
+    for(int i=0;i<dirLights.size();i++) {
+        std::unique_ptr<DirectionalLight> dirLight = std::make_unique<DirectionalLight>("DirectionalLight: " + i);
+        std::unique_ptr<Node> OwnerNode = std::make_unique<Node>(0, "LightNode");
+        dirLight->set_node(*OwnerNode);
+        dirLight->set_properties(LightProperties(dirLights[i]));
+
+        CurrentScene->add_node(std::move(OwnerNode));
+        CurrentScene->add_component(std::move(dirLight));
+    }
 
 
 
@@ -358,7 +388,7 @@ void voko::buildMeshes()
 }
 
 void voko::buildLights() {
-    auto spotLights = CurrentScene->get_components<Light>();
+    auto spotLights = CurrentScene->get_components<SpotLight>();
 
     voko_global::SPOT_LIGHT_COUNT = spotLights.size();
 
@@ -367,6 +397,14 @@ void voko::buildLights() {
         uniformBufferLighting.spotLights[i] = std::get<voko_buffer::SpotLight>(spotLight->get_properties());
     }
 
+    auto dirLights  = CurrentScene->get_components<Light>();
+
+    voko_global::DIR_LIGHT_COUNT = dirLights.size();
+
+    for(uint32_t i = 0; i < dirLights.size();i++) {
+        const auto dirLight = dirLights[i];
+        uniformBufferLighting.dirLights[i] = std::get<voko_buffer::DirectionalLight>(dirLight->get_properties());
+    }
 }
 
 
@@ -671,6 +709,9 @@ void voko::UpdateSceneUniformBuffer()
     // why revert x&z? 
     uniformBufferView.viewPos = glm::vec4(camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);;
 
+    // Update lights
+    uniformBufferLighting.dirLightCount = voko_global::DIR_LIGHT_COUNT;
+    uniformBufferLighting.spotLightCount = voko_global::SPOT_LIGHT_COUNT;
 
     // Update spot lights
     // Animate
@@ -699,6 +740,7 @@ void voko::CreatePerMeshDescriptor()
     std::vector<VkDescriptorPoolSize> poolSizes = {
         // 1 for meshPropsSSBO, 1 for meshInstanceSSBO
         vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, voko_global::MESH_MAX * 2),
+        // mesh_max * mesh_samplers_max
         vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, voko_global::MESH_MAX * voko_global::MESH_SAMPLER_MAX)
     };
     VkDescriptorPoolCreateInfo descriptorPoolInfo = vks::initializers::descriptorPoolCreateInfo(poolSizes, voko_global::MESH_MAX);
@@ -710,17 +752,24 @@ void voko::CreatePerMeshDescriptor()
         vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS, 0),
         // Binding 1: Mesh Instance SSBO
         vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS, 1),
-        // Binding 2: Mesh Albedo map
-        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2),
-        // Binding 3: Mesh Normal map
-        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3),
-        // Binding 4: Mesh AO map
-       vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 4),
-        // Binding 5: Mesh Metallic map
-        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 5),
-        // Binding 6: Mesh Roughness map
-       vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 6),
+
     };
+
+    for(auto meshSampler : voko_global::meshSamplers) {
+        setLayoutBindings.emplace_back(
+            vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, meshSampler.binding));
+    }
+  //   // Binding 2: Mesh Albedo map
+  //   vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2),
+  //   // Binding 3: Mesh Normal map
+  //   vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3),
+  //   // Binding 4: Mesh Metallic map
+  //   vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 4),
+  //   // Binding 5: Mesh Roughness map
+  //  vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 5),
+  //   // Binding 6: Mesh AO map
+  // vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 6),
+
     VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
     VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &voko_global::PerMeshDescriptorSetLayout));
 
@@ -742,29 +791,23 @@ void voko::CreateAndUploadPerMeshBuffer(Mesh* mesh, uint32_t MeshIndex) const
     // 1: Mesh Instance
     vks::Buffer& instanceSSBO = mesh->instanceSSBO;
     uint32_t instanceSSBOSize = sizeof(voko_buffer::PerInstanceSSBO) * mesh->Instances.size();
-    // 3-4: Samplers
-	vks::Texture2D& colorMap = mesh->Textures.albedoMap;
-    vks::Texture2D& normalMap = mesh->Textures.normalMap;
 
     // Create -> map -> upload mesh ssbo
     VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         &meshPropSSBO, meshPropsSSBOSize));
     VK_CHECK_RESULT(meshPropSSBO.map());
-    glm::mat4 meshModelMatrix = mesh->get_node()->get_transform().get_matrix();
+    mesh->meshProperty.modelMatrix = mesh->get_node()->get_transform().get_matrix();
     memcpy(meshPropSSBO.mapped, 
-        &meshModelMatrix, 
+        &mesh->meshProperty,
         meshPropsSSBOSize);
 
     std::vector<VkWriteDescriptorSet> writeDescriptorSets = 
     {
         // Binding 0: Mesh Prop Buffer
         vks::initializers::writeDescriptorSet(voko_global::PerMeshDescriptorSets[MeshIndex], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 0, &meshPropSSBO.descriptor),
-        // Binding 2: Mesh Color map
-        vks::initializers::writeDescriptorSet(voko_global::PerMeshDescriptorSets[MeshIndex], VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &colorMap.descriptor),
-        // Binding 3: Mesh Normal map
-        vks::initializers::writeDescriptorSet(voko_global::PerMeshDescriptorSets[MeshIndex], VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &normalMap.descriptor),
     };
 
+    // Only update mesh instance ssbo when valid data
     if (instanceSSBOSize != 0) {
         // Create -> map -> upload instance ssbo
         VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -777,6 +820,19 @@ void voko::CreateAndUploadPerMeshBuffer(Mesh* mesh, uint32_t MeshIndex) const
     	// Binding 1: Mesh Instance Buffer
         writeDescriptorSets.emplace_back(
             vks::initializers::writeDescriptorSet(voko_global::PerMeshDescriptorSets[MeshIndex], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &instanceSSBO.descriptor));
+    }
+
+    // Only update sampler when valid data
+    for(auto meshSampler : voko_global::meshSamplers) {
+        if(mesh->meshProperty.usedSamplers & meshSampler.flag) {
+            writeDescriptorSets.emplace_back(
+                vks::initializers::writeDescriptorSet(
+                    voko_global::PerMeshDescriptorSets[MeshIndex],
+                    VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    meshSampler.binding,
+                    &mesh->Textures.GetTexture(meshSampler.flag).descriptor)
+            );
+        }
     }
 
     // Update pre-allocated descriptor sets

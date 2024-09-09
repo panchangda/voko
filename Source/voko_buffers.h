@@ -30,32 +30,54 @@ namespace voko_buffer {
     */
 
     // mesh properties
+    struct alignas(16) MaterialConstants {
+        glm::vec4 rgba;
+        float metallic;
+        float roughness;
+        float ao;
+
+        MaterialConstants(): rgba(glm::vec4(1.0f)), metallic(0.f), roughness(1.0f), ao(0.f)
+        {}
+
+        MaterialConstants(glm::vec4 _rgba, float _m, float _r, float _a):
+            rgba(_rgba), metallic(_m), roughness(_r),ao(_a)
+        {}
+    };
     struct MeshProperty
     {
         glm::mat4 modelMatrix;
-    };
+        uint32_t usedSamplers;
+        MaterialConstants matConstants;
 
+        MeshProperty(): modelMatrix(glm::mat4(1.0f)),
+                        usedSamplers(voko_global::EMeshSamplerFlags::ALL),
+                        matConstants()
+        {}
+    };
 
 
     /**
      * Light buffers
      */
-    struct DirectionalLight
+    struct alignas(16) DirectionalLight
     {
-        glm::vec3 direction;
-        glm::vec3 color;
-        // directional light range
-        glm::vec2 lr;
-        glm::vec2 tb;
-        glm::vec2 nf;
+        glm::vec4 direction;
+        glm::vec4 color;
+        float intensity;
+
+        DirectionalLight():
+        direction(glm::vec4(1.0f)),color(glm::vec4(1.0f)), intensity(1.0f){}
+        DirectionalLight(glm::vec4 _direction, glm::vec4 _color, float _intensity):
+        direction(_direction), color(_color), intensity(_intensity){}
     };
 
-    struct PointLight
+    struct alignas(16) PointLight
     {
         glm::vec4 position;
         glm::vec4 color;
         glm::mat4 viewMatrix;
         float intensity;
+
     };
 
     // 112 B
@@ -105,20 +127,22 @@ namespace voko_buffer {
 
     struct alignas(16) UniformBufferLighting {
         // lights
-        uint32_t lightModel = 1; // 0:PBR, 1:Blinn-Phong, 2:Phong
-        uint32_t spotLightCount = 3;
+        uint32_t lightModel = 0; // 0:PBR, 1:Blinn-Phong, 2:Phong
+        uint32_t dirLightCount = 0;
+        DirectionalLight dirLights[voko_global::DIR_LIGHT_MAX];
+        uint32_t spotLightCount = 0;
         SpotLight spotLights[voko_global::SPOT_LIGHT_MAX];
+
         float ambientCoef = 0.1f;
         uint32_t skybox = 1;
 
         // shadow
         uint32_t useShadows = 1;
         uint32_t shadowFilterMethod = 1; // 0:Fixed size shadow factor, 1:PCF, 2:PCSS
-        float shadowFactor = 0.25f;
+        float shadowFactor = 0.1f;
     };
-
-    struct alignas(16) UniformBufferDebug {
-        // debug vars
+    // debug switch & offs
+    struct UniformBufferDebug {
         uint32_t debugGBuffer = 0; // 0:off, 1:shadow, 2:fragPos, 3:normal, 4:albedo.rgb, 5:albedo.aaa
         uint32_t debugLighting = 0; // 0:off, 1:ambient, 2:diffuse, 3:specular,
     };
@@ -128,6 +152,8 @@ namespace voko_buffer {
         UniformBufferView view;
         UniformBufferLighting lighting;
         UniformBufferDebug debug;
+
+        UniformBufferScene():view(),lighting(),debug(){}
     };
 }
 

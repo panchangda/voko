@@ -4,9 +4,11 @@
 *
 */
 
-#ifndef UNIFORM_BUFFER_SCENE_DECLARED
-#define UNIFORM_BUFFER_SCENE_DECLARED
+#ifndef SCENE_VH
+#define SCENE_VH
 
+
+#define PI 3.1415926535897932384626433832795
 
 
 struct UniformBufferView{
@@ -18,6 +20,12 @@ struct UniformBufferView{
 
 // Size macros must be same as CPU definitions
 #define SPOT_LIGHT_MAX 3
+#define DIR_LIGHT_MAX 4
+struct DirectionalLight{
+    vec4 direction;
+    vec4 color;
+    float intensity;
+};
 
 struct SpotLight {
     vec4 position;
@@ -32,9 +40,17 @@ struct SpotLight {
 struct UniformBufferLighting{
     // lights
     uint lightModel;
+
+    uint dirLightCount;
+    DirectionalLight dirLights[DIR_LIGHT_MAX];
+
     uint spotLightCount;
     SpotLight spotLights[SPOT_LIGHT_MAX];
+
     float ambientCoef;
+
+    uint skybox;
+
     // shadows
     uint useShadows;
     uint shadowFilterMethod; // 0:PCF, 1:PCSS
@@ -60,4 +76,4 @@ layout (set = 0, binding = 0) uniform UniformBufferScene
 #define uboLighting uboScene.lighting
 #define uboDebug uboScene.debug
 
-#endif // UNIFORM_BUFFER_SCENE_DECLARED
+#endif // SCENE_VH

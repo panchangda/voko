@@ -1,4 +1,5 @@
 #include "voko_globals.h"
+#include "SceneGraph/Mesh.h"
 
 namespace voko_global
 {
@@ -27,5 +28,7 @@ namespace voko_global
 
 
     int SPOT_LIGHT_COUNT = 3;
+    int DIR_LIGHT_COUNT = 4;
     int MESH_COUNT = 0;
+
 }

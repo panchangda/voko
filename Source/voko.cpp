@@ -96,9 +96,26 @@ void voko::getEnabledFeatures()
     }else {
         vks::tools::exitFatal("Selected GPU does not support samplerAnisotropy!", VK_ERROR_FEATURE_NOT_PRESENT);
     }
+
+    // enable descriptor partially bound features
+    physicalDeviceDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
+    physicalDeviceDescriptorIndexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
+    deviceCreatepNextChain = &physicalDeviceDescriptorIndexingFeatures;
 }
 
-void voko::getEnabledExtensions(){}
+void voko::getEnabledInstanceExtensions() {
+    enabledInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+}
+
+void voko::getEnabledExtensions() {
+
+    // placed before instance was created
+    // enabledInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    enabledDeviceExtensions.push_back(VK_KHR_MAINTENANCE1_EXTENSION_NAME);
+    enabledDeviceExtensions.push_back(VK_KHR_MAINTENANCE3_EXTENSION_NAME);
+    // Add device ext for dynamic ds & partially bind ds
+    enabledDeviceExtensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+}
 
 
 // void voko::buildCommandBuffers()
@@ -315,6 +332,7 @@ void voko::loadScene2() {
     CurrentScene->add_component(std::move(cerberus));
     CurrentScene->add_node(std::move(cerberusNode));
 
+    // background wall
     std::unique_ptr<Node> StoneFloor02Node = std::make_unique<Node>(0, "StoneFloor02");
     std::unique_ptr<Mesh> StoneFloor02 = std::make_unique<Mesh>("StoneFloor02");
     StoneFloor02->VkGltfModel.loadFromFile(getAssetPath() + "models/deferred_box.gltf", vulkanDevice, queue, glTFLoadingFlags);
@@ -347,12 +365,13 @@ void voko::loadScene2() {
     }
 
 
-
     // IBL: cubes & env cube map
-    // enable IBL
+    // enable ibl for environment lighting
+    uniformBufferLighting.useIBL = 1;
+
     bComputeIBL = true;
-    // cube mesh
-    skybox.loadFromFile(getAssetPath() + "models/cube.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    // Add cube mesh for ibl calculation
+    voko_global::skybox.loadFromFile(getAssetPath() + "models/cube.gltf", vulkanDevice, queue, glTFLoadingFlags);
     // environment cube map
     iblTextures.environmentCube.loadFromFile(getAssetPath() + "textures/hdr/gcanyon_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
 }
@@ -363,7 +382,6 @@ void voko::buildScene() {
         generateBRDFLUT();
         generateIrradianceCube();
         generatePrefilteredCube();
-        uniformBufferLighting.skybox = 1;
         bComputeIBL = false;
     }
 
@@ -422,7 +440,7 @@ void voko::render()
 
     
     UpdateSceneUniformBuffer();
-    
+
     draw();
 }
 
@@ -663,6 +681,7 @@ void voko::CreateSceneDescriptor()
     // Scene pool
     std::vector<VkDescriptorPoolSize> poolSizes = {
         vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
+        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4),
     };
     VkDescriptorPoolCreateInfo descriptorPoolInfo = vks::initializers::descriptorPoolCreateInfo(poolSizes, 1);
     VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &SceneDescriptorPool));
@@ -670,8 +689,18 @@ void voko::CreateSceneDescriptor()
     
     std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
         // Binding 0: Scene Uniform Buffer: view info, light info...
-        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS, 0)
+        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS, 0),
+        // IBLs:
+        // Binding 1: Environment Cube
+        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1),
+        // Binding 2: Irrdiance
+        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2),
+        // Binding 3: lutBrdf
+        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_ALL_GRAPHICS, 3),
+        // Binding 4: prefiltered
+        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_ALL_GRAPHICS, 4)
     };
+
     VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
     VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &voko_global::SceneDescriptorSetLayout));
 
@@ -683,9 +712,24 @@ void voko::CreateSceneDescriptor()
     VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &voko_global::SceneDescriptorSet));
     writeDescriptorSets = {
         // Binding 0: Vertex shader uniform buffer
-        vks::initializers::writeDescriptorSet(voko_global::SceneDescriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &SceneUB.descriptor),
+        vks::initializers::writeDescriptorSet(voko_global::SceneDescriptorSet,
+                                              VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0,
+                                              &SceneUB.descriptor),
+        vks::initializers::writeDescriptorSet(voko_global::SceneDescriptorSet,
+                                              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1,
+                                              &iblTextures.environmentCube.descriptor),
+        vks::initializers::writeDescriptorSet(voko_global::SceneDescriptorSet,
+                                              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2,
+                                              &iblTextures.irradianceCube.descriptor),
+        vks::initializers::writeDescriptorSet(voko_global::SceneDescriptorSet,
+                                              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3,
+                                              &iblTextures.lutBrdf.descriptor),
+        vks::initializers::writeDescriptorSet(voko_global::SceneDescriptorSet,
+                                              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4,
+                                              &iblTextures.prefilteredCube.descriptor)
     };
-    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0,
+                           nullptr);
 }
 
 void voko::CreateSceneUniformBuffer()
@@ -752,7 +796,6 @@ void voko::CreatePerMeshDescriptor()
         vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS, 0),
         // Binding 1: Mesh Instance SSBO
         vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS, 1),
-
     };
 
     for(auto meshSampler : voko_global::meshSamplers) {
@@ -770,8 +813,28 @@ void voko::CreatePerMeshDescriptor()
   //   // Binding 6: Mesh AO map
   // vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 6),
 
-    VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &voko_global::PerMeshDescriptorSetLayout));
+    // Enable partially bound extensions for meshes with variable textures using same ds layout
+    // [POI] The fragment shader will be using an unsized array of samplers, which has to be marked with the VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT
+    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT setLayoutBindingFlags{};
+    setLayoutBindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+    setLayoutBindingFlags.bindingCount = setLayoutBindings.size();
+    // Binding 0&1 is the buffer, which does not use indexing
+    // Binding 2-6 are the fragment shader images, which use indexing
+    std::vector<VkDescriptorBindingFlagsEXT> descriptorBindingFlags = {
+        0,0,
+        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT,
+        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT,
+        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT,
+        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT,
+        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT
+    };
+    setLayoutBindingFlags.pBindingFlags = descriptorBindingFlags.data();
+
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI  = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
+    // descriptorSetLayoutCI.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+    descriptorSetLayoutCI.pNext = &setLayoutBindingFlags;
+
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCI, nullptr, &voko_global::PerMeshDescriptorSetLayout));
 
 
     voko_global::PerMeshDescriptorSets.resize(voko_global::MESH_MAX);
@@ -823,8 +886,8 @@ void voko::CreateAndUploadPerMeshBuffer(Mesh* mesh, uint32_t MeshIndex) const
     }
 
     // Only update sampler when valid data
-    for(auto meshSampler : voko_global::meshSamplers) {
-        if(mesh->meshProperty.usedSamplers & meshSampler.flag) {
+    for (auto meshSampler: voko_global::meshSamplers) {
+        if(mesh->meshProperty.usedSamplers & meshSampler.flag){
             writeDescriptorSets.emplace_back(
                 vks::initializers::writeDescriptorSet(
                     voko_global::PerMeshDescriptorSets[MeshIndex],
@@ -832,6 +895,21 @@ void voko::CreateAndUploadPerMeshBuffer(Mesh* mesh, uint32_t MeshIndex) const
                     meshSampler.binding,
                     &mesh->Textures.GetTexture(meshSampler.flag).descriptor)
             );
+        }else {
+
+            // to-do: if partially bound ext is not enabled, upload a 1x1 `null` image
+
+            // VkDescriptorImageInfo emptyImageInfo = {};
+            // emptyImageInfo.sampler = VK_NULL_HANDLE;
+            // emptyImageInfo.imageView = VK_NULL_HANDLE;
+            // emptyImageInfo.imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            // writeDescriptorSets.emplace_back(
+            //     vks::initializers::writeDescriptorSet(
+            //         voko_global::PerMeshDescriptorSets[MeshIndex],
+            //         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            //         meshSampler.binding,
+            //         &emptyImageInfo)
+            // );
         }
     }
 

@@ -157,6 +157,7 @@ public:
     VkShaderModule loadSPIRVShader(std::string filename);
     uint32_t getMemoryTypeIndex(uint32_t typeBits, VkMemoryPropertyFlags properties);
 
+    virtual void getEnabledInstanceExtensions();
     virtual void getEnabledFeatures();
     virtual void getEnabledExtensions();
 
@@ -204,12 +205,10 @@ public:
         vks::TextureCubeMap prefilteredCube;
     }iblTextures;
 
-    vkglTF::Model skybox;
-
     void generateBRDFLUT();
     void generateIrradianceCube();
     void generatePrefilteredCube();
-
+    void buildSkyboxForRendering();
 
     /* Initialization funcs & vars*/
 	void init();
@@ -270,6 +269,8 @@ public:
         VkImageView view;
 		} depthStencil;
 
+    // Optinal Physical Device Descriptor for ds indexing
+    VkPhysicalDeviceDescriptorIndexingFeaturesEXT physicalDeviceDescriptorIndexingFeatures{};
     /** @brief Optional pNext structure for passing extension structures to device creation */
     void* deviceCreatepNextChain = nullptr;
     // check if a extension is in `supportedDeviceExtensions`

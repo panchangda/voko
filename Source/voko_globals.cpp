@@ -3,8 +3,11 @@
 
 namespace voko_global
 {
-    // ` ` only prevent multiple definition errors after c++17
-    
+    // Consts & Counts
+    int SPOT_LIGHT_COUNT = 3;
+    int DIR_LIGHT_COUNT = 4;
+    int MESH_COUNT = 0;
+
     // Global Cmd Buffer Pool
     VkCommandPool commandPool = {VK_NULL_HANDLE};
     // Global render pass for frame buffer writes
@@ -26,9 +29,7 @@ namespace voko_global
     uint32_t width = 1280;
     uint32_t height = 720;
 
-
-    int SPOT_LIGHT_COUNT = 3;
-    int DIR_LIGHT_COUNT = 4;
-    int MESH_COUNT = 0;
-
+    // IBL
+    bool bDisplaySkybox = true;
+    vkglTF::Model skybox = vkglTF::Model();
 }

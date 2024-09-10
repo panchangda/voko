@@ -90,10 +90,10 @@ namespace voko_buffer {
         float lightCosInnerAngle;
         float lightCosOuterAngle;
         SpotLight():
-        position({}),
-        target({}),
-        color({}),
-        viewMatrix({}),
+        position(glm::vec4(0.0f)),
+        target(glm::vec4(0.0f)),
+        color(glm::vec4(1.0f)),
+        viewMatrix(glm::mat4(0.0f)),
         range(0.0f),
         lightCosInnerAngle(0.f),
         lightCosOuterAngle(0.f)
@@ -134,7 +134,8 @@ namespace voko_buffer {
         SpotLight spotLights[voko_global::SPOT_LIGHT_MAX];
 
         float ambientCoef = 0.1f;
-        uint32_t skybox = 1;
+
+        uint32_t useIBL = 1;
 
         // shadow
         uint32_t useShadows = 1;

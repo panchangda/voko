@@ -25,7 +25,7 @@ void main()
 	mat4 modelMatrix = ssboMesh.modelMatrix;
 
 	gl_Position = uboView.projectionMatrix * uboView.viewMatrix * modelMatrix * tmpPos;
-	
+
 	outUV = inUV;
 
 	// Vertex position in world space

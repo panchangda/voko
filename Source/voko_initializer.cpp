@@ -291,11 +291,11 @@ VkResult voko::createInstance(){
             for (VkExtensionProperties& extension : extensions)
             {
                 supportedInstanceExtensions.push_back(extension.extensionName);
-}
+            }
         }
     }
 
-    // IOS & MacOS 
+    // IOS & MacOS
 #if (defined(VK_USE_PLATFORM_IOS_MVK) || defined(VK_USE_PLATFORM_MACOS_MVK))
     // SRS - When running on iOS/macOS with MoltenVK, enable VK_KHR_get_physical_device_properties2 if not already enabled by the example (required by VK_KHR_portability_subset)
     if (std::find(enabledInstanceExtensions.begin(), enabledInstanceExtensions.end(), VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) == enabledInstanceExtensions.end())
@@ -304,6 +304,7 @@ VkResult voko::createInstance(){
     }
 #endif
 
+    getEnabledInstanceExtensions();
 
     // Enabled requested instance extensions
     if (enabledInstanceExtensions.size() > 0)

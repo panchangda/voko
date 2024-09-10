@@ -6,6 +6,7 @@
 #include "RenderPass/Geometry.h"
 #include "RenderPass/Lighting.h"
 #include "RenderPass/Shadow.h"
+#include "RenderPass/Skybox.hpp"
 
 DeferredRenderer::DeferredRenderer(
     vks::VulkanDevice* inVulkanDeivce,
@@ -89,6 +90,17 @@ DeferredRenderer::DeferredRenderer(
         shadow_pass,
         geometry_pass);
     RenderPasses.push_back(std::move(lighting_pass));
+
+    // process skybox
+    if (voko_global::bDisplaySkybox) {
+        std::unique_ptr<SkyboxPass> skybox_pass = std::make_unique<SkyboxPass>(
+            "SkyboxPass",
+            vulkanDevice,
+            voko_global::width, voko_global::height,
+            ERenderPassType::FullScreen,
+            EPassAttachmentType::OnScreen);
+        RenderPasses.push_back(std::move(skybox_pass));
+    }
 }
 
 void DeferredRenderer::Render()
@@ -113,7 +125,7 @@ void DeferredRenderer::Render()
             submitInfo.pSignalSemaphores = &renderComplete;
         }
         
-        submitInfo.pCommandBuffers = &pass->getCommandBuffer(voko_global::currentBuffer);
+        submitInfo.pCommandBuffers = pass->getCommandBuffer(voko_global::currentBuffer);
         VK_CHECK_RESULT(vkQueueSubmit(gfxQueue, 1, &submitInfo, VK_NULL_HANDLE));
     }
 

@@ -3,11 +3,28 @@
 #include <array>
 #include <vulkan/vulkan_core.h>
 
+// use forward declaration to avoid multiple definition errors
+// `inline` only prevent multiple definition errors after c++17
 class Mesh;
+namespace vkglTF {
+    class Model;
+}
+
 
 namespace voko_global
 {
-    // `inline` only prevent multiple definition errors after c++17
+    // Consts & Counts
+    constexpr int SPOT_LIGHT_MAX = 3;
+    constexpr int DIR_LIGHT_MAX = 4;
+    constexpr int MESH_MAX = 100;
+    constexpr int MESH_SAMPLER_MAX = 12;
+    constexpr int MESH_SAMPLER_COUNT = 2;
+
+    extern int SPOT_LIGHT_COUNT;
+    extern int DIR_LIGHT_COUNT;
+    extern int MESH_COUNT;
+
+    // Global Resources
     // Global Cmd Buffer Pool
     extern VkCommandPool commandPool;
     // Global render pass for frame buffer writes
@@ -29,18 +46,12 @@ namespace voko_global
     extern uint32_t width;
     extern uint32_t height;
 
+    // IBL Resources
+    extern bool bDisplaySkybox;
+    extern vkglTF::Model skybox;
 
 
-    constexpr int SPOT_LIGHT_MAX = 3;
-    constexpr int DIR_LIGHT_MAX = 4;
-    constexpr int MESH_MAX = 100;
-    constexpr int MESH_SAMPLER_MAX = 12;
-    constexpr int MESH_SAMPLER_COUNT = 2;
-
-    extern int SPOT_LIGHT_COUNT;
-    extern int DIR_LIGHT_COUNT;
-    extern int MESH_COUNT;
-
+    // Mesh Samplers
     enum EMeshSamplerFlags
     {
         ALBEDO    = 0x01,   // 0000 0001
@@ -63,5 +74,8 @@ namespace voko_global
         {5, ROUGHNESS},
         {6, AO}
     };
+
+
+
 
 };

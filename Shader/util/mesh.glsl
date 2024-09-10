@@ -21,7 +21,7 @@ struct MaterialConstants{
 	float ao;
 };
 
-layout (set = 1, binding = 0) buffer SSBOMeshProperty
+layout (set = 1, binding = 0) readonly buffer SSBOMeshProperty
 {
 	mat4 modelMatrix;
 	uint usedSamplers;
@@ -32,7 +32,7 @@ layout (set = 1, binding = 0) buffer SSBOMeshProperty
 struct PerInstanceSSBO{
     vec4 instancePos;
 };
-layout (std430, set = 1, binding = 1) buffer SSBOInstance
+layout (std430, set = 1, binding = 1) readonly buffer SSBOInstance
 {
 	PerInstanceSSBO instances[]; 
 } ssboInstance;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <variant>
 #include <vector>
 
 #include <vulkan/vulkan_core.h>
@@ -86,9 +87,6 @@ public:
                 cmdBuffer = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, false);
             }
         }
-
-
-
     }
     
     virtual ~RenderPass() = default;
@@ -123,14 +121,13 @@ public:
     vks::Framebuffer* getFrameBuffer() { return frameBuffer; }
 
     bool isInitialized(){ return bInitialized; }
-    
-    VkCommandBuffer& getCommandBuffer(uint32_t imageIndex)
+
+    VkCommandBuffer* getCommandBuffer(uint32_t imageIndex)
     {
-        VkCommandBuffer cmdBufferNullHandle = VK_NULL_HANDLE;
         if(!bInitialized)
         {
             vks::tools::exitFatal("Pass Haven't Initialized!", 1);
-            return cmdBufferNullHandle;
+            return nullptr;
         }
         
         if(passAttachmentType == EPassAttachmentType::OnScreen)
@@ -138,25 +135,25 @@ public:
             if(imageIndex > drawCmdBuffers.size() - 1)
             {
                 vks::tools::exitFatal("OnScreen Pass's Draw Command Buffers Size doesn't Match SwapChain Size!", 1);
-                return cmdBufferNullHandle;
+                return nullptr;
             }
             
-            return drawCmdBuffers[imageIndex];
+            return &drawCmdBuffers[imageIndex];
             
         }else if(passAttachmentType == EPassAttachmentType::OffScreen)
         {
             if(cmdBuffer == VK_NULL_HANDLE)
             {
                 vks::tools::exitFatal("Pass Doesn't Build a Command Buffer!", 1);
-                return cmdBufferNullHandle;
+                return nullptr;
             }
 
-            return cmdBuffer;
+            return &cmdBuffer;
 
             
         }
         
-        return cmdBufferNullHandle;
+        return nullptr;
     }
     
     std::string passName = "";

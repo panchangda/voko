@@ -542,7 +542,7 @@ void voko::generateIrradianceCube() {
             vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelinelayout, 0, 1, &descriptorset, 0,
                                     NULL);
 
-            skybox.draw(cmdBuf);
+            voko_global::skybox.draw(cmdBuf);
 
             vkCmdEndRenderPass(cmdBuf);
 
@@ -944,7 +944,7 @@ void voko::generatePrefilteredCube() {
             vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelinelayout, 0, 1, &descriptorset, 0,
                                     NULL);
 
-            skybox.draw(cmdBuf);
+            voko_global::skybox.draw(cmdBuf);
 
             vkCmdEndRenderPass(cmdBuf);
 

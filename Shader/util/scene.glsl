@@ -49,7 +49,7 @@ struct UniformBufferLighting{
 
     float ambientCoef;
 
-    uint skybox;
+    uint useIBL;
 
     // shadows
     uint useShadows;
@@ -69,6 +69,11 @@ layout (set = 0, binding = 0) uniform UniformBufferScene
     UniformBufferLighting lighting;
     UniformBufferDebug debug;
 } uboScene;
+// IBL:
+layout (set = 0, binding = 1) uniform samplerCube environmentMap;
+layout (set = 0, binding = 2) uniform samplerCube irradianceMap;
+layout (set = 0, binding = 3) uniform sampler2D lutBrdf;
+layout (set = 0, binding = 4) uniform samplerCube prefilteredMap;
 
 
 // e.g. translate uboView -> uboScene.view

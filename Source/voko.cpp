@@ -28,6 +28,7 @@ void voko::prepare()
     setupSwapChain();
     createCommandBuffers();
     createSynchronizationPrimitives();
+    setupSceneColor();
     setupDepthStencil();
     setupRenderPass();
     createPipelineCache();

@@ -11,8 +11,11 @@
 #include <algorithm>
 #include <iterator>
 #include <vector>
+
+#include "voko_globals.h"
 #include "vulkan/vulkan.h"
 #include "VulkanDevice.h"
+#include "VulkanSwapChain.h"
 #include "VulkanTools.h"
 
 namespace vks
@@ -223,7 +226,57 @@ namespace vks
 
 			return static_cast<uint32_t>(attachments.size() - 1);
 		}
+		// usage of global scene color
+		uint32_t SetSceneColorUsage(VkAttachmentLoadOp colorLoadOp, VkAttachmentStoreOp storeOp) {
+			vks::FramebufferAttachment attachment;
 
+			// Set view & description
+			attachment.view = voko_global::sceneColor.view;
+			attachment.format = voko_global::sceneColor.format;
+			// Params are hard coded same as scene depth stencil
+			attachment.description = {};
+			attachment.description.samples = VK_SAMPLE_COUNT_1_BIT;
+			attachment.description.loadOp = colorLoadOp;
+			attachment.description.storeOp = storeOp;
+			attachment.description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			attachment.description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			attachment.description.format = attachment.format;
+			attachment.description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			attachment.description.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+			attachment.subresourceRange.layerCount = 1;
+
+			attachments.push_back(attachment);
+			return static_cast<uint32_t>(attachments.size() - 1);
+		}
+
+		// usage of global depth stencil
+		uint32_t SetDepthStencilUsage(VkAttachmentLoadOp depthLoadOp, VkAttachmentStoreOp depthStoreOp,
+			VkAttachmentLoadOp stencilLoadOp, VkAttachmentStoreOp stencilStoreOp) {
+
+			vks::FramebufferAttachment attachment;
+
+			attachment.image = voko_global::depthStencil.image;
+			attachment.view = voko_global::depthStencil.view;
+			attachment.memory = voko_global::depthStencil.mem;
+			attachment.format = voko_global::depthFormat;
+			// Params are hard coded same as scene depth stencil
+			attachment.description = {};
+			attachment.description.samples = VK_SAMPLE_COUNT_1_BIT;
+			attachment.description.loadOp = depthLoadOp;
+			attachment.description.storeOp = depthStoreOp;
+			attachment.description.stencilLoadOp = stencilLoadOp;
+			attachment.description.stencilStoreOp = stencilStoreOp;
+			attachment.description.format = attachment.format;
+			attachment.description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			attachment.description.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+			attachment.subresourceRange.layerCount = 1;
+
+
+			attachments.push_back(attachment);
+			return static_cast<uint32_t>(attachments.size() - 1);
+		}
 		/**
 		* Creates a default sampler for sampling from any of the framebuffer attachments
 		* Applications are free to create their own samplers for different use cases 

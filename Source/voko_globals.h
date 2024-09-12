@@ -9,7 +9,7 @@ class Mesh;
 namespace vkglTF {
     class Model;
 }
-
+class VulkanSwapChain;
 
 namespace voko_global
 {
@@ -33,6 +33,27 @@ namespace voko_global
     extern std::vector<VkFramebuffer> frameBuffers;
     // Active frame buffer index
     extern uint32_t currentBuffer;
+
+    /* Global Color Textures & Depth Stencil */
+    extern struct SceneColor {
+        VkImage image;
+        VkDeviceMemory memory;
+        VkImageView view;
+        VkFormat format;
+        uint32_t width;
+        uint32_t height;
+    } sceneColor;
+    // Depth buffer format (selected during Vulkan initialization)
+    extern VkFormat depthFormat;
+    extern struct DepthStencil{
+        VkImage image;
+        VkDeviceMemory mem;
+        VkImageView view;
+        VkFormat format;
+    } depthStencil;
+
+    extern VulkanSwapChain* swapChain;
+
     
     // Global scene infos for pass rendering
     extern std::vector<Mesh *> SceneMeshes;

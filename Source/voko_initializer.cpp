@@ -31,6 +31,10 @@ void voko::createCommandPool()
 void voko::setupSwapChain()
 {
     swapChain.create(&voko_global::width, &voko_global::height, settings.vsync, settings.fullscreen);
+
+    // Expose swapChains for global resources access
+    voko_global::swapChain = &swapChain;
+
 }
 
 void voko::createCommandBuffers()
@@ -58,12 +62,57 @@ void voko::createSynchronizationPrimitives()
     }
 }
 
+void voko::setupSceneColor()
+{
+    VkImageCreateInfo imageCI{};
+    imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageCI.imageType = VK_IMAGE_TYPE_2D;
+    imageCI.format = voko_global::swapChain->colorFormat;
+    imageCI.extent = { voko_global::width, voko_global::height, 1 };
+    imageCI.mipLevels = 1;
+    imageCI.arrayLayers = 1;
+    imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageCI.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+    VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &voko_global::sceneColor.image));
+    VkMemoryRequirements memReqs{};
+    vkGetImageMemoryRequirements(device, voko_global::sceneColor.image, &memReqs);
+
+    VkMemoryAllocateInfo memAllloc{};
+    memAllloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memAllloc.allocationSize = memReqs.size;
+    memAllloc.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    VK_CHECK_RESULT(vkAllocateMemory(device, &memAllloc, nullptr, &voko_global::sceneColor.memory));
+    VK_CHECK_RESULT(vkBindImageMemory(device, voko_global::sceneColor.image, voko_global::sceneColor.memory, 0));
+
+    VkImageViewCreateInfo imageViewCI{};
+    imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    imageViewCI.image = voko_global::sceneColor.image;
+    imageViewCI.format = voko_global::swapChain->colorFormat;
+    imageViewCI.subresourceRange.baseMipLevel = 0;
+    imageViewCI.subresourceRange.levelCount = 1;
+    imageViewCI.subresourceRange.baseArrayLayer = 0;
+    imageViewCI.subresourceRange.layerCount = 1;
+    imageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+    VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &voko_global::sceneColor.view));
+
+
+
+    // set sceneColor infos
+    voko_global::sceneColor.format = voko_global::swapChain->colorFormat;
+    voko_global::sceneColor.width = voko_global::width;
+    voko_global::sceneColor.height = voko_global::height;
+}
+
 void voko::setupDepthStencil()
 {
     VkImageCreateInfo imageCI{};
     imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageCI.imageType = VK_IMAGE_TYPE_2D;
-    imageCI.format = depthFormat;
+    imageCI.format = voko_global::depthFormat;
     imageCI.extent = { voko_global::width, voko_global::height, 1 };
     imageCI.mipLevels = 1;
     imageCI.arrayLayers = 1;
@@ -71,32 +120,32 @@ void voko::setupDepthStencil()
     imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageCI.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-    VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &depthStencil.image));
+    VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &voko_global::depthStencil.image));
     VkMemoryRequirements memReqs{};
-    vkGetImageMemoryRequirements(device, depthStencil.image, &memReqs);
+    vkGetImageMemoryRequirements(device, voko_global::depthStencil.image, &memReqs);
 
     VkMemoryAllocateInfo memAllloc{};
     memAllloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memAllloc.allocationSize = memReqs.size;
     memAllloc.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    VK_CHECK_RESULT(vkAllocateMemory(device, &memAllloc, nullptr, &depthStencil.mem));
-    VK_CHECK_RESULT(vkBindImageMemory(device, depthStencil.image, depthStencil.mem, 0));
+    VK_CHECK_RESULT(vkAllocateMemory(device, &memAllloc, nullptr, &voko_global::depthStencil.mem));
+    VK_CHECK_RESULT(vkBindImageMemory(device, voko_global::depthStencil.image, voko_global::depthStencil.mem, 0));
 
     VkImageViewCreateInfo imageViewCI{};
     imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    imageViewCI.image = depthStencil.image;
-    imageViewCI.format = depthFormat;
+    imageViewCI.image = voko_global::depthStencil.image;
+    imageViewCI.format = voko_global::depthFormat;
     imageViewCI.subresourceRange.baseMipLevel = 0;
     imageViewCI.subresourceRange.levelCount = 1;
     imageViewCI.subresourceRange.baseArrayLayer = 0;
     imageViewCI.subresourceRange.layerCount = 1;
     imageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
     // Stencil aspect should only be set on depth + stencil formats (VK_FORMAT_D16_UNORM_S8_UINT..VK_FORMAT_D32_SFLOAT_S8_UINT
-    if (depthFormat >= VK_FORMAT_D16_UNORM_S8_UINT) {
+    if (voko_global::depthFormat >= VK_FORMAT_D16_UNORM_S8_UINT) {
         imageViewCI.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
     }
-    VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &depthStencil.view));
+    VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &voko_global::depthStencil.view));
 }
 
 void voko::setupRenderPass()
@@ -112,7 +161,7 @@ void voko::setupRenderPass()
 	attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 	// Depth attachment
-	attachments[1].format = depthFormat;
+	attachments[1].format = voko_global::depthFormat;
 	attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
 	attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -183,7 +232,7 @@ void voko::setupFrameBuffer()
     VkImageView attachments[2];
 
     // Depth/Stencil attachment is the same for all frame buffers
-    attachments[1] = depthStencil.view;
+    attachments[1] = voko_global::depthStencil.view;
 
     VkFramebufferCreateInfo frameBufferCreateInfo = {};
     frameBufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -451,10 +500,10 @@ VkResult voko::createDeviceAndQueueAndCommandPool(VkPhysicalDeviceFeatures enabl
     VkBool32 validFormat{ false };
     // Samples that make use of stencil will require a depth + stencil format, so we select from a different list
     if (requiresStencil) {
-        validFormat = vks::tools::getSupportedDepthStencilFormat(physicalDevice, &depthFormat);
+        validFormat = vks::tools::getSupportedDepthStencilFormat(physicalDevice, &voko_global::depthFormat);
     }
     else {
-        validFormat = vks::tools::getSupportedDepthFormat(physicalDevice, &depthFormat);
+        validFormat = vks::tools::getSupportedDepthFormat(physicalDevice, &voko_global::depthFormat);
     }
     assert(validFormat);
 

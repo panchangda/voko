@@ -22,7 +22,16 @@ m_ShadowPass(ShadowPass), m_GeometryPass(GeometryPass)
 
 void LightingPass::setupFrameBuffer()
 {
-    // Use global scene framebuffer & render pass, no need for pass setup
+	frameBuffer = new vks::Framebuffer(vulkanDevice);
+	frameBuffer->width = width;
+	frameBuffer->height = height;
+
+	// first pass writing to scene color:
+	frameBuffer->SetSceneColorUsage(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE);
+	frameBuffer->SetDepthStencilUsage(VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
+		VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE);
+
+	frameBuffer->createRenderPass();
 }
 
 void LightingPass::setupDescriptorSet()
@@ -135,7 +144,7 @@ void LightingPass::setupDescriptorSet()
 		// Binding 6: Shadow map
 		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, &texDescriptorShadowMap),
 	};
-	
+
 	vkUpdateDescriptorSets(vulkanDevice->logicalDevice, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
 
 }
@@ -157,7 +166,7 @@ void LightingPass::preparePipeline()
 		VkPipelineDynamicStateCreateInfo dynamicState = vks::initializers::pipelineDynamicStateCreateInfo(dynamicStateEnables);
 		std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages;
 
-		VkGraphicsPipelineCreateInfo pipelineCI = vks::initializers::pipelineCreateInfo(pipelineLayout, voko_global::renderPass);
+		VkGraphicsPipelineCreateInfo pipelineCI = vks::initializers::pipelineCreateInfo(pipelineLayout, frameBuffer->renderPass);
 		pipelineCI.pInputAssemblyState = &inputAssemblyState;
 		pipelineCI.pRasterizationState = &rasterizationState;
 		pipelineCI.pColorBlendState = &colorBlendState;
@@ -184,43 +193,71 @@ void LightingPass::buildCommandBuffer()
     VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
 
     VkClearValue clearValues[2];
-    clearValues[0].color = { { 0.0f, 0.0f, 0.2f, 0.0f } };
+    clearValues[0].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
     clearValues[1].depthStencil = { 1.0f, 0 };
 
     VkRenderPassBeginInfo renderPassBeginInfo = vks::initializers::renderPassBeginInfo();
-    renderPassBeginInfo.renderPass = voko_global::renderPass;
+    renderPassBeginInfo.renderPass = frameBuffer->renderPass;
+	renderPassBeginInfo.framebuffer = frameBuffer->framebuffer;
     renderPassBeginInfo.renderArea.offset.x = 0;
     renderPassBeginInfo.renderArea.offset.y = 0;
-    renderPassBeginInfo.renderArea.extent.width = voko_global::width;
-    renderPassBeginInfo.renderArea.extent.height = voko_global::height;
+    renderPassBeginInfo.renderArea.extent.width = frameBuffer->width;
+    renderPassBeginInfo.renderArea.extent.height = frameBuffer->height;
     renderPassBeginInfo.clearValueCount = 2;
     renderPassBeginInfo.pClearValues = clearValues;
 
-    for (int32_t i = 0; i < drawCmdBuffers.size(); ++i)
-    {
-        // Set target frame buffer
-        renderPassBeginInfo.framebuffer = voko_global::frameBuffers[i];
 
-        VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffers[i], &cmdBufInfo));
+	VK_CHECK_RESULT(vkBeginCommandBuffer(cmdBuffer, &cmdBufInfo));
 
-        vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+	VkViewport viewport;
+	VkRect2D scissor;
+	viewport = vks::initializers::viewport((float)frameBuffer->width, (float)frameBuffer->height, 0.0f, 1.0f);
+	vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+	scissor = vks::initializers::rect2D(frameBuffer->width, frameBuffer->height, 0, 0);
+	vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
 
-        VkViewport viewport = vks::initializers::viewport((float)voko_global::width, (float)voko_global::height, 0.0f, 1.0f);
-        vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
 
-        VkRect2D scissor = vks::initializers::rect2D(voko_global::width, voko_global::height, 0, 0);
-        vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
+	vkCmdBeginRenderPass(cmdBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-    	// bind scene ds
-        vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &voko_global::SceneDescriptorSet, 0, nullptr);
-    	// bind lighint pass ds
-    	vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &descriptorSet, 0, nullptr);
+    // bind scene ds
+    vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
+                            &voko_global::SceneDescriptorSet, 0, nullptr);
+    // bind lighint pass ds
+    vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &descriptorSet, 0,
+                            nullptr);
 
-        vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-        vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
+	vkCmdDraw(cmdBuffer, 3, 1, 0, 0);
 
-        vkCmdEndRenderPass(drawCmdBuffers[i]);
+	vkCmdEndRenderPass(cmdBuffer);
 
-        VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
-    }
+	VK_CHECK_RESULT(vkEndCommandBuffer(cmdBuffer));
+
+    // for (int32_t i = 0; i < drawCmdBuffers.size(); ++i)
+    // {
+    //     // Set target frame buffer
+    //     renderPassBeginInfo.framebuffer = voko_global::frameBuffers[i];
+    //
+    //     VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffers[i], &cmdBufInfo));
+    //
+    //     vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    //
+    //     VkViewport viewport = vks::initializers::viewport((float)voko_global::width, (float)voko_global::height, 0.0f, 1.0f);
+    //     vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
+    //
+    //     VkRect2D scissor = vks::initializers::rect2D(voko_global::width, voko_global::height, 0, 0);
+    //     vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
+    //
+    // 	// bind scene ds
+    //     vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &voko_global::SceneDescriptorSet, 0, nullptr);
+    // 	// bind lighint pass ds
+    // 	vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &descriptorSet, 0, nullptr);
+    //
+    //     vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    //     vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
+    //
+    //     vkCmdEndRenderPass(drawCmdBuffers[i]);
+    //
+    //     VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
+    // }
 }

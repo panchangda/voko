@@ -16,5 +16,5 @@ void main()
     vec4 vecView = matClipToWorldNoTranslation * posClip;
     outUVW = vecView.xyz / vecView.w;
 
-//    gl_Position = vec4(outUV * 2.0f - 1.0f, 0.0f, 1.0f);
+    gl_Position = vec4(outUV * 2.0f - 1.0f, 1.0f, 1.0f);
 }

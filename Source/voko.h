@@ -81,6 +81,7 @@ public:
     void setupSwapChain();
     void createCommandBuffers();
     void createSynchronizationPrimitives();
+    void setupSceneColor();
     void setupDepthStencil();
     void setupRenderPass();
     void createPipelineCache();
@@ -263,11 +264,7 @@ public:
         bool overlay = true;
     } settings;
 
-    struct {
-        VkImage image;
-        VkDeviceMemory mem;
-        VkImageView view;
-		} depthStencil;
+
 
     // Optinal Physical Device Descriptor for ds indexing
     VkPhysicalDeviceDescriptorIndexingFeaturesEXT physicalDeviceDescriptorIndexingFeatures{};
@@ -285,8 +282,7 @@ public:
     VkDevice device{ VK_NULL_HANDLE };
     // Handle to the device graphics queue that command buffers are submitted to
     VkQueue queue{ VK_NULL_HANDLE };
-    // Depth buffer format (selected during Vulkan initialization)
-    VkFormat depthFormat;
+
     // Command buffers used for rendering
     std::vector<VkCommandBuffer> drawCmdBuffers;
     // Contains command buffers and semaphores to be presented to the queue

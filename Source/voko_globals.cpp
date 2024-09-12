@@ -1,4 +1,5 @@
 #include "voko_globals.h"
+#include "VulkanSwapChain.h"
 #include "SceneGraph/Mesh.h"
 
 namespace voko_global
@@ -16,6 +17,15 @@ namespace voko_global
     std::vector<VkFramebuffer> frameBuffers;
     // Active frame buffer index
     uint32_t currentBuffer = 0;
+
+
+    /* Global Color Textures & Depth Stencil */
+    SceneColor sceneColor = {VK_NULL_HANDLE,VK_NULL_HANDLE,VK_NULL_HANDLE, VK_FORMAT_UNDEFINED, 0, 0};
+
+    VkFormat depthFormat = VK_FORMAT_UNDEFINED;
+    DepthStencil depthStencil = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+
+    VulkanSwapChain* swapChain = nullptr;
 
     // Global scene infos for pass rendering
     std::vector<Mesh*> SceneMeshes;

@@ -26,6 +26,7 @@ DeferredRenderer::DeferredRenderer(
 
     gfxQueue = inGfxQueue;
 
+
     
     submitInfo = vks::initializers::submitInfo();
     /** @brief Pipeline stages used to wait at for graphics queue submissions */
@@ -56,78 +57,210 @@ DeferredRenderer::DeferredRenderer(
         (2048, 2048);
 #endif
     
-    std::shared_ptr<ShadowPass> shadow_pass = std::make_shared<ShadowPass>(
+    shadow_pass = std::make_shared<ShadowPass>(
         "ShadowPass",
         vulkanDevice,
         ShadowResolution.first, ShadowResolution.second,
         ERenderPassType::Mesh,
         EPassAttachmentType::OffScreen,
         1.25f, 1.75f);
-    RenderPasses.push_back(shadow_pass);
+    // RenderPasses.push_back(shadow_pass);
 
     // geometry pass
     std::pair<uint32_t, uint32_t> GBufferResolution = std::make_pair
-#ifdef __ANDROID__ // Use smaller shadow maps on mobile due to performance reasons
-   (1024, 1024);
+#ifdef __ANDROID__
+    (voko_global::width / 2, voko_global::height / 2);
 #else
-    (2048, 2048);
+    (voko_global::width, voko_global::height);
 #endif
-    std::shared_ptr<GeometryPass> geometry_pass = std::make_shared<GeometryPass>(
+    geometry_pass = std::make_shared<GeometryPass>(
         "GeometryPass",
         vulkanDevice,
         GBufferResolution.first, GBufferResolution.second,
         ERenderPassType::Mesh,
         EPassAttachmentType::OffScreen);
-    RenderPasses.push_back(geometry_pass);
+    // RenderPasses.push_back(geometry_pass);
     
     // lighting pass
-    std::unique_ptr<LightingPass> lighting_pass = std::make_unique<LightingPass>(
+    lighting_pass = std::make_unique<LightingPass>(
         "LightingPass",
         vulkanDevice,
         voko_global::width, voko_global::height,
         ERenderPassType::FullScreen,
-        EPassAttachmentType::OnScreen,
+        EPassAttachmentType::OffScreen,
         shadow_pass,
         geometry_pass);
-    RenderPasses.push_back(std::move(lighting_pass));
+    // RenderPasses.push_back(std::move(lighting_pass));
 
     // process skybox
     if (voko_global::bDisplaySkybox) {
-        std::unique_ptr<SkyboxPass> skybox_pass = std::make_unique<SkyboxPass>(
+        skybox_pass = std::make_unique<SkyboxPass>(
             "SkyboxPass",
             vulkanDevice,
             voko_global::width, voko_global::height,
             ERenderPassType::FullScreen,
-            EPassAttachmentType::OnScreen);
-        RenderPasses.push_back(std::move(skybox_pass));
+            EPassAttachmentType::OffScreen);
+        // RenderPasses.push_back(std::move(skybox_pass));
     }
+
+
+
+    // Build blit pass
+    buildBlitPass();
 }
 
 void DeferredRenderer::Render()
 {
-    // Set submitInfo for sequential passes
-    for(size_t i=0;i<RenderPasses.size();i++)
-    {
-        const auto& pass = RenderPasses[i];
-        if(i == 0) // wait for present
-        {
-            submitInfo.pWaitSemaphores = &presentComplete;
-            
-        }else // wait for previous
-        {
-            submitInfo.pWaitSemaphores = &RenderPasses[i-1]->passSemaphore;
-        }
-        
-        // signal self pass semaphore
-        submitInfo.pSignalSemaphores = &pass->passSemaphore;
-        if(i == RenderPasses.size()-1) // signal render complete
-        {
-            submitInfo.pSignalSemaphores = &renderComplete;
-        }
-        
-        submitInfo.pCommandBuffers = pass->getCommandBuffer(voko_global::currentBuffer);
-        VK_CHECK_RESULT(vkQueueSubmit(gfxQueue, 1, &submitInfo, VK_NULL_HANDLE));
-    }
+    // // Set submitInfo for sequential passes
+    // for(size_t i=0;i<RenderPasses.size();i++)
+    // {
+    //     const auto& pass = RenderPasses[i];
+    //     if(i == 0) // wait for present
+    //     {
+    //         submitInfo.pWaitSemaphores = &presentComplete;
+    //
+    //     }else // wait for previous
+    //     {
+    //         submitInfo.pWaitSemaphores = &RenderPasses[i-1]->passSemaphore;
+    //     }
+    //
+    //     // signal self pass semaphore
+    //     submitInfo.pSignalSemaphores = &pass->passSemaphore;
+    //     if(i == RenderPasses.size()-1) // signal render complete
+    //     {
+    //         submitInfo.pSignalSemaphores = &renderComplete;
+    //     }
+    //
+    //     submitInfo.pCommandBuffers = pass->getCommandBuffer(voko_global::currentBuffer);
+    //     VK_CHECK_RESULT(vkQueueSubmit(gfxQueue, 1, &submitInfo, VK_NULL_HANDLE));
+    // }
 
+
+    // shadow waits for presentComplete
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitDstStageMask = &defaultSubmitPipelineStageFlags;
+    submitInfo.pWaitSemaphores = &presentComplete;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &shadow_pass->passSemaphore;
+    submitInfo.pCommandBuffers = shadow_pass->getCommandBuffer(voko_global::currentBuffer);
+    VK_CHECK_RESULT(vkQueueSubmit(gfxQueue, 1, &submitInfo, VK_NULL_HANDLE));
+
+    // geometry waits for presentComplete
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitDstStageMask = &defaultSubmitPipelineStageFlags;
+    submitInfo.pWaitSemaphores = &shadow_pass->passSemaphore;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &geometry_pass->passSemaphore;
+    submitInfo.pCommandBuffers = geometry_pass->getCommandBuffer(voko_global::currentBuffer);
+    VK_CHECK_RESULT(vkQueueSubmit(gfxQueue, 1, &submitInfo, VK_NULL_HANDLE));
+
+    // lighting waits for:
+    // 1: geometry pass, 2: shadow pass
+    submitInfo.waitSemaphoreCount = 2;
+    VkPipelineStageFlags light_pass_wait_stages[2] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    submitInfo.pWaitDstStageMask = light_pass_wait_stages;
+    VkSemaphore lighting_pass_wait_semaphore[2] = {shadow_pass->passSemaphore, geometry_pass->passSemaphore};
+    submitInfo.pWaitSemaphores = lighting_pass_wait_semaphore;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &lighting_pass->passSemaphore;
+    submitInfo.pCommandBuffers = lighting_pass->getCommandBuffer(voko_global::currentBuffer);
+    VK_CHECK_RESULT(vkQueueSubmit(gfxQueue, 1, &submitInfo, VK_NULL_HANDLE));
+
+    // skybox waits for lighting
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitDstStageMask = &defaultSubmitPipelineStageFlags;
+    submitInfo.pWaitSemaphores = &lighting_pass->passSemaphore;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &skybox_pass->passSemaphore;
+    submitInfo.pCommandBuffers = skybox_pass->getCommandBuffer(voko_global::currentBuffer);
+    VK_CHECK_RESULT(vkQueueSubmit(gfxQueue, 1, &submitInfo, VK_NULL_HANDLE));
+
+
+
+
+    // blit waits for skybox,
+    // after blit, signal renderComplete
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = &skybox_pass->passSemaphore;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &renderComplete;
+    submitInfo.pCommandBuffers = &blitCmdBuffer;
+    VK_CHECK_RESULT(vkQueueSubmit(gfxQueue, 1, &submitInfo, VK_NULL_HANDLE));
+
+}
+
+void DeferredRenderer::buildBlitPass() {
+
+    blitCmdBuffer = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, false);
+
+    VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
+    VK_CHECK_RESULT(vkBeginCommandBuffer(blitCmdBuffer, &cmdBufInfo));
+
+
+    VkImage& dstImage = voko_global::swapChain->buffers[voko_global::currentBuffer].image;
+
+    // Set image layout for transfer
+    vks::tools::setImageLayout(
+        blitCmdBuffer,
+        voko_global::sceneColor.image,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+    vks::tools::setImageLayout(
+        blitCmdBuffer,
+        dstImage,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+
+    VkImageSubresourceLayers imageSubresource = vks::initializers::imageSubresourceLayers(
+    VK_IMAGE_ASPECT_COLOR_BIT,
+    0,
+    0,
+    1);
+
+    int32_t srcWidth, srcHeight, dstWidth, dstHeight;
+    srcWidth = dstWidth = static_cast<int32_t>(voko_global::width);
+    srcHeight = dstHeight = static_cast<int32_t>(voko_global::height);
+    // offset0 point to image left top, offset1 point to image right bottom
+    // offset0&1 set image bounds
+    VkOffset3D srcOffsets[2] = {VkOffset3D(0,0,0), VkOffset3D(srcWidth,srcHeight,1)};
+    VkOffset3D dstOffsets[2] = {VkOffset3D(0,0,0), VkOffset3D(dstWidth,dstHeight,1)};
+    VkImageBlit imageBlit = vks::initializers::imageBlit(
+        imageSubresource, srcOffsets,
+        imageSubresource, dstOffsets);
+
+    // Blit scene color to swapChain buffer
+    vkCmdBlitImage(blitCmdBuffer,
+        voko_global::sceneColor.image,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        dstImage,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &imageBlit,
+        VK_FILTER_LINEAR);
+
+
+    // Revert scene color for color write
+    // Set swapChain image for present
+    vks::tools::setImageLayout(
+    blitCmdBuffer,
+    voko_global::sceneColor.image,
+    VK_IMAGE_ASPECT_COLOR_BIT,
+    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    );
+    
+    vks::tools::setImageLayout(
+        blitCmdBuffer,
+        dstImage,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+
+    VK_CHECK_RESULT(vkEndCommandBuffer(blitCmdBuffer));
 }
 

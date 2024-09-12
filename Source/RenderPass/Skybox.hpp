@@ -2,6 +2,7 @@
 
 #include "RenderPass.h"
 #include "voko_globals.h"
+#include "VulkanFrameBuffer.hpp"
 
 
 class SkyboxPass : public RenderPass
@@ -16,6 +17,20 @@ public:
 	RenderPass(name, inVulkanDevice, inWidth, inHeight, inPassType, inAttachmentType)
     {
 	    init();
+    }
+	virtual void setupFrameBuffer() override {
+
+    	frameBuffer = new vks::Framebuffer(vulkanDevice);
+    	frameBuffer->width = width;
+    	frameBuffer->height = height;
+
+    	// load scene color:
+    	frameBuffer->SetSceneColorUsage(VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE);
+    	frameBuffer->SetDepthStencilUsage(VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE);
+
+    	frameBuffer->createRenderPass();
+
     }
 	virtual void setupDescriptorSet() override {
     	std::array<VkDescriptorSetLayout ,1> skyboxDsLayouts = {voko_global::SceneDescriptorSetLayout};
@@ -44,7 +59,7 @@ public:
 		VkPipelineDynamicStateCreateInfo dynamicState = vks::initializers::pipelineDynamicStateCreateInfo(dynamicStateEnables);
 		std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages;
 
-		VkGraphicsPipelineCreateInfo pipelineCI = vks::initializers::pipelineCreateInfo(pipelineLayout, voko_global::renderPass);
+		VkGraphicsPipelineCreateInfo pipelineCI = vks::initializers::pipelineCreateInfo(pipelineLayout, frameBuffer->renderPass);
 		pipelineCI.pInputAssemblyState = &inputAssemblyState;
 		pipelineCI.pRasterizationState = &rasterizationState;
 		pipelineCI.pColorBlendState = &colorBlendState;
@@ -74,38 +89,35 @@ public:
     	clearValues[1].depthStencil = { 1.0f, 0 };
 
     	VkRenderPassBeginInfo renderPassBeginInfo = vks::initializers::renderPassBeginInfo();
-    	renderPassBeginInfo.renderPass = voko_global::renderPass;
-    	renderPassBeginInfo.renderArea.offset.x = 0;
-    	renderPassBeginInfo.renderArea.offset.y = 0;
-    	renderPassBeginInfo.renderArea.extent.width = voko_global::width;
-    	renderPassBeginInfo.renderArea.extent.height = voko_global::height;
+    	renderPassBeginInfo.renderPass = frameBuffer->renderPass;
+    	renderPassBeginInfo.framebuffer = frameBuffer->framebuffer;
+    	renderPassBeginInfo.renderArea.extent.width = frameBuffer->width;
+    	renderPassBeginInfo.renderArea.extent.height = frameBuffer->height;
     	renderPassBeginInfo.clearValueCount = 2;
     	renderPassBeginInfo.pClearValues = clearValues;
 
-    	for (int32_t i = 0; i < drawCmdBuffers.size(); ++i)
-    	{
-    		// Set target frame buffer
-    		renderPassBeginInfo.framebuffer = voko_global::frameBuffers[i];
+    	VK_CHECK_RESULT(vkBeginCommandBuffer(cmdBuffer, &cmdBufInfo));
 
-    		VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffers[i], &cmdBufInfo));
+    	VkViewport viewport;
+    	VkRect2D scissor;
+    	viewport = vks::initializers::viewport((float)frameBuffer->width, (float)frameBuffer->height, 0.0f, 1.0f);
+    	vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+    	scissor = vks::initializers::rect2D(frameBuffer->width, frameBuffer->height, 0, 0);
+    	vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
 
-    		vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    		VkViewport viewport = vks::initializers::viewport((float)voko_global::width, (float)voko_global::height, 0.0f, 1.0f);
-    		vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
+    	vkCmdBeginRenderPass(cmdBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    	vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-    		VkRect2D scissor = vks::initializers::rect2D(voko_global::width, voko_global::height, 0, 0);
-    		vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
+    	// bind scene ds
+    	vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
+								&voko_global::SceneDescriptorSet, 0, nullptr);
 
-    		vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &voko_global::SceneDescriptorSet, 0, nullptr);
+    	vkCmdDraw(cmdBuffer, 3, 1, 0, 0);
 
-    		vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-    		vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
+    	vkCmdEndRenderPass(cmdBuffer);
 
-    		vkCmdEndRenderPass(drawCmdBuffers[i]);
-
-    		VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
-    	}
+    	VK_CHECK_RESULT(vkEndCommandBuffer(cmdBuffer));
     }
     virtual ~SkyboxPass() override {};
 };

@@ -661,5 +661,34 @@ namespace vks
 			return writeDescriptorSetAccelerationStructureKHR;
 		}
 
+		// added for voko
+		inline VkImageSubresourceLayers imageSubresourceLayers(
+			VkImageAspectFlags imageAspectFlags,
+			uint32_t mipLevel,
+			uint32_t baseArrayLayer,
+			uint32_t layerCount)
+		{
+			VkImageSubresourceLayers imageSubresourceLayers{};
+			imageSubresourceLayers.aspectMask = imageAspectFlags;
+			imageSubresourceLayers.baseArrayLayer = baseArrayLayer;
+			imageSubresourceLayers.layerCount = layerCount;
+			imageSubresourceLayers.mipLevel = mipLevel;
+			return imageSubresourceLayers;
+		}
+
+		inline VkImageBlit imageBlit(
+			VkImageSubresourceLayers srcSubResource,
+			VkOffset3D srcOffset[2],
+			VkImageSubresourceLayers dstSubResource,
+			VkOffset3D dstOffset[2]){
+			VkImageBlit imageBlit{};
+			imageBlit.srcSubresource = srcSubResource;
+			imageBlit.srcOffsets[0] = srcOffset[0];
+			imageBlit.srcOffsets[1] = srcOffset[1];
+			imageBlit.dstSubresource = dstSubResource;
+			imageBlit.dstOffsets[0] = dstOffset[0];
+			imageBlit.dstOffsets[1] = dstOffset[1];
+			return imageBlit;
+		}
 	}
 }

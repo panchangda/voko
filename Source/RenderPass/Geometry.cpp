@@ -53,15 +53,10 @@ void GeometryPass::setupFrameBuffer()
     attachmentInfo.format = VK_FORMAT_R8_UNORM;
     frameBuffer->addAttachment(attachmentInfo);
 
-    // Depth attachment
-    // Find a suitable depth format
-    VkFormat attDepthFormat;
-    VkBool32 validDepthFormat = vks::tools::getSupportedDepthFormat(physicalDevice, &attDepthFormat);
-    assert(validDepthFormat);
-
-    attachmentInfo.format = attDepthFormat;
-    attachmentInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    frameBuffer->addAttachment(attachmentInfo);
+    // geometry pass depth stencil ops:
+    // clear -> write -> store
+    frameBuffer->SetDepthStencilUsage(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE);
 
     // Create sampler to sample from the color attachments
     VK_CHECK_RESULT(frameBuffer->createSampler(VK_FILTER_NEAREST, VK_FILTER_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
@@ -154,23 +149,8 @@ void GeometryPass::preparePipeline()
 void GeometryPass::buildCommandBuffer()
 {
     VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
-    
-    VkRenderPassBeginInfo renderPassBeginInfo = vks::initializers::renderPassBeginInfo();
+
     std::array<VkClearValue, 7> clearValues = {};
-    VkViewport viewport;
-    VkRect2D scissor;
-    
-    VK_CHECK_RESULT(vkBeginCommandBuffer(cmdBuffer, &cmdBufInfo));
-    
-    viewport = vks::initializers::viewport((float)frameBuffer->width, (float)frameBuffer->height, 0.0f, 1.0f);
-    vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
-
-    scissor = vks::initializers::rect2D(frameBuffer->width, frameBuffer->height, 0, 0);
-    vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
-
-    // Second pass: Deferred calculations
-    // -------------------------------------------------------------------------------------------------------
-
     // Clear values for all attachments written in the fragment shader
     clearValues[0].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
     clearValues[1].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
@@ -180,12 +160,28 @@ void GeometryPass::buildCommandBuffer()
     clearValues[5].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
     clearValues[6].depthStencil = { 1.0f, 0 };
 
+    VkRenderPassBeginInfo renderPassBeginInfo = vks::initializers::renderPassBeginInfo();
+
+
     renderPassBeginInfo.renderPass = frameBuffer->renderPass;
     renderPassBeginInfo.framebuffer = frameBuffer->framebuffer;
     renderPassBeginInfo.renderArea.extent.width = frameBuffer->width;
     renderPassBeginInfo.renderArea.extent.height = frameBuffer->height;
     renderPassBeginInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassBeginInfo.pClearValues = clearValues.data();
+
+
+
+    
+    VK_CHECK_RESULT(vkBeginCommandBuffer(cmdBuffer, &cmdBufInfo));
+
+    VkViewport viewport;
+    VkRect2D scissor;
+    viewport = vks::initializers::viewport((float)frameBuffer->width, (float)frameBuffer->height, 0.0f, 1.0f);
+    vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+    scissor = vks::initializers::rect2D(frameBuffer->width, frameBuffer->height, 0, 0);
+    vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
+
 
     vkCmdBeginRenderPass(cmdBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);

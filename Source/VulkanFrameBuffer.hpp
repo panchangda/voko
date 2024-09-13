@@ -400,7 +400,7 @@ namespace vks
 			renderPassInfo.attachmentCount = static_cast<uint32_t>(attachmentDescriptions.size());
 			renderPassInfo.subpassCount = 1;
 			renderPassInfo.pSubpasses = &subpass;
-			renderPassInfo.dependencyCount = dependencies.size();
+			renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 			renderPassInfo.pDependencies = dependencies.data();
 			VK_CHECK_RESULT(vkCreateRenderPass(vulkanDevice->logicalDevice, &renderPassInfo, nullptr, &renderPass));
 

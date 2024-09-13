@@ -73,7 +73,12 @@ void voko::setupSceneColor()
     imageCI.arrayLayers = 1;
     imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCI.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    // scene color might be used as: attachment | sampler | transfer src & dst
+    imageCI.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+    | VK_IMAGE_USAGE_SAMPLED_BIT
+    | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+    | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
 
     VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &voko_global::sceneColor.image));
     VkMemoryRequirements memReqs{};

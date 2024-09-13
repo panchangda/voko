@@ -680,7 +680,8 @@ namespace vks
 			VkImageSubresourceLayers srcSubResource,
 			VkOffset3D srcOffset[2],
 			VkImageSubresourceLayers dstSubResource,
-			VkOffset3D dstOffset[2]){
+			VkOffset3D dstOffset[2])
+		{
 			VkImageBlit imageBlit{};
 			imageBlit.srcSubresource = srcSubResource;
 			imageBlit.srcOffsets[0] = srcOffset[0];
@@ -689,6 +690,22 @@ namespace vks
 			imageBlit.dstOffsets[0] = dstOffset[0];
 			imageBlit.dstOffsets[1] = dstOffset[1];
 			return imageBlit;
+		}
+
+		inline VkImageCopy imageCopy(
+			VkImageSubresourceLayers srcSubresource,
+			VkImageSubresourceLayers dstSubresource,
+			VkExtent3D extent,
+			VkOffset3D srcOffset = VkOffset3D(0, 0, 0),
+			VkOffset3D dstOffset = VkOffset3D(0, 0, 0))
+		{
+			VkImageCopy imageCopy{};
+			imageCopy.srcSubresource = srcSubresource;
+			imageCopy.dstSubresource = dstSubresource;
+			imageCopy.extent = extent;
+			imageCopy.srcOffset = srcOffset;
+			imageCopy.dstOffset = dstOffset;
+			return imageCopy;
 		}
 	}
 }

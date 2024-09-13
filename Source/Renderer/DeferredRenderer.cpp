@@ -7,6 +7,7 @@
 #include "RenderPass/Lighting.h"
 #include "RenderPass/Shadow.h"
 #include "RenderPass/Skybox.hpp"
+#include "RenderPass/Tone.hpp"
 
 DeferredRenderer::DeferredRenderer(
     vks::VulkanDevice* inVulkanDeivce,
@@ -103,7 +104,14 @@ DeferredRenderer::DeferredRenderer(
         // RenderPasses.push_back(std::move(skybox_pass));
     }
 
-
+    // post process tone pass
+    tone_pass = std::make_unique<TonePass>(
+        "TonePass",
+        vulkanDevice,
+        voko_global::width, voko_global::height,
+        ERenderPassType::FullScreen,
+        EPassAttachmentType::OffScreen
+    );
 
     // Build blit pass
     buildBlitPass();
@@ -179,13 +187,20 @@ void DeferredRenderer::Render()
     submitInfo.pCommandBuffers = skybox_pass->getCommandBuffer(voko_global::currentBuffer);
     VK_CHECK_RESULT(vkQueueSubmit(gfxQueue, 1, &submitInfo, VK_NULL_HANDLE));
 
+    // tone pass wait for skybox
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitDstStageMask = &defaultSubmitPipelineStageFlags;
+    submitInfo.pWaitSemaphores = &skybox_pass->passSemaphore;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &tone_pass->passSemaphore;
+    submitInfo.pCommandBuffers = tone_pass->getCommandBuffer(voko_global::currentBuffer);
+    VK_CHECK_RESULT(vkQueueSubmit(gfxQueue, 1, &submitInfo, VK_NULL_HANDLE));
 
 
-
-    // blit waits for skybox,
+    // blit waits for tone,
     // after blit, signal renderComplete
     submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &skybox_pass->passSemaphore;
+    submitInfo.pWaitSemaphores = &tone_pass->passSemaphore;
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = &renderComplete;
     submitInfo.pCommandBuffers = &blitCmdBuffers[voko_global::currentBuffer];
@@ -202,7 +217,6 @@ void DeferredRenderer::buildBlitPass() {
 
         VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
         VK_CHECK_RESULT(vkBeginCommandBuffer(blitCmdBuffers[i], &cmdBufInfo));
-
 
         VkImage &dstImage = voko_global::swapChain->buffers[i].image;
 

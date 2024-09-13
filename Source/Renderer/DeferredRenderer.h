@@ -1,6 +1,7 @@
 #pragma once
 #include "SceneRenderer.h"
 
+class TonePass;
 class SkyboxPass;
 class LightingPass;
 class GeometryPass;
@@ -39,6 +40,7 @@ private:
     std::shared_ptr<GeometryPass> geometry_pass;
     std::unique_ptr<LightingPass> lighting_pass;
     std::unique_ptr<SkyboxPass> skybox_pass;
+    std::unique_ptr<TonePass> tone_pass;
 
 
 };

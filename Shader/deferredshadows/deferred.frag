@@ -2,6 +2,7 @@
 
 #extension GL_ARB_shading_language_include : require
 #include "../util/scene.glsl"
+#include "../util/color.glsl"
 
 layout (set = 1, binding = 0) uniform sampler2D samplerposition;
 layout (set = 1, binding = 1) uniform sampler2D samplerNormal;
@@ -115,6 +116,12 @@ vec3 fresnelSchlick(float cosTheta, vec3 albedo, float metalness)
 	F0 = mix(F0, albedo, metalness);
 	return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
+vec3 F_SchlickR(float cosTheta, vec3 albedo, float metalness, float roughness)
+{
+	vec3 F0 = vec3(0.04);
+	F0 = mix(F0, albedo, metalness);
+	return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
+}
 
 // Geometric Shadowing function --------------------------------------
 float GeometrySchlickGGX(float NdotV, float roughness)
@@ -144,7 +151,9 @@ vec3 PBR(vec3 N, vec3 V, vec3 L, float metalness, float roughness,
 	vec3 H = normalize(V+L);
 	float D = DistributionGGX(N, H, roughness);
 	float G   = GeometrySmith(N, V, L, roughness);
-	float cosTheta = max(dot(N, L), 0.0);
+	// When using microfacet(e.g. cook-torrance) model,
+	// cosTheta = HDotV, otherwise cosTheta = NDotV
+	float cosTheta = max(dot(H, V), 0.0);
 	vec3 F = fresnelSchlick(cosTheta, albedo, metalness);
 	vec3 numerator    = D * G * F;
 	float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0);
@@ -158,6 +167,16 @@ vec3 PBR(vec3 N, vec3 V, vec3 L, float metalness, float roughness,
 	// scale light by NdotL
 	float NdotL = max(dot(N, L), 0.0);
 	return (kD / PI * albedo  + specular) * radiance * NdotL;
+}
+vec3 prefilteredReflection(vec3 R, float roughness)
+{
+	const float MAX_REFLECTION_LOD = 9.0; // todo: param/const
+	float lod = roughness * MAX_REFLECTION_LOD;
+	float lodf = floor(lod);
+	float lodc = ceil(lod);
+	vec3 a = textureLod(prefilteredMap, R, lodf).rgb;
+	vec3 b = textureLod(prefilteredMap, R, lodc).rgb;
+	return mix(a, b, lod - lodf);
 }
 
 // define shiness for phong specular calculations
@@ -180,6 +199,7 @@ vec3 phong(vec3 L, vec3 V, vec3 N, vec3 albedo, vec3 lightColor, float intensity
 }
 
 
+
 // ----------------------------------------------------------------------------
 void main() 
 {
@@ -187,6 +207,8 @@ void main()
 	vec3 fragPos = texture(samplerposition, inUV).rgb;
 	vec3 normal = texture(samplerNormal, inUV).rgb;
 	vec4 albedo = texture(samplerAlbedo, inUV);
+	albedo.rgb = gammaToLinear(albedo.rgb);
+
 	float metallic = texture(samplerMetallic, inUV).r;
 	float roughness = texture(samplerRoughness, inUV).r;
 	float ao = texture(samplerAO, inUV).r;
@@ -222,11 +244,40 @@ void main()
 	V = normalize(V);
 
 	// Ambient part
-	vec3 fragColor = vec3(0.03) * albedo.rgb * ao;
+	vec3 fragColor = vec3(0.0);
 
 	/*
 	* Lighting:
 	*/
+	// Ambient
+	if(uboLighting.useIBL == 1)
+	{
+		// IBL ambient calculation
+		vec3 R = reflect(-V, N);
+		vec2 brdf = texture(brdfLut, vec2(max(dot(N, V), 0.0), roughness)).rg;
+		vec3 reflection = prefilteredReflection(R, roughness).rgb;
+		vec3 irradiance = texture(irradianceMap, N).rgb;
+
+		// Diffuse
+		vec3 diffuse = albedo.rgb * irradiance;
+
+		// Reflectance
+		float cosTheta = max(dot(N, V), 0.0);
+		vec3 F = F_SchlickR(cosTheta, albedo.rgb, metallic, roughness);
+		vec3 specular = reflection * (F * brdf.x + brdf.y);
+
+		vec3 kD = 1.0 - F;
+		kD *= 1 - metallic;
+		vec3 ambient = (kD * diffuse + specular) * vec3(ao);
+
+		fragColor += ambient;
+
+	}else
+	{
+		// fixed ambient lighting
+		fragColor += vec3(0.03) * albedo.rgb * vec3(ao);
+	}
+
 	// directional lights
 	vec4 dirLighted = vec4(0.0);
 	for(uint i=0;i<uboLighting.dirLightCount;i++){
@@ -318,10 +369,7 @@ void main()
 
 
 
-	// HDR tonemapping
-	fragColor = fragColor / (fragColor + vec3(1.0));
-	// gamma correct
-	fragColor = pow(fragColor, vec3(1.0/2.2));
+
 
 	outfragColor = vec4(fragColor, 1.0);
 }

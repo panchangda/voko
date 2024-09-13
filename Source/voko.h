@@ -47,7 +47,7 @@
 
 
 namespace voko_math {
-    constexpr float M_PI = 3.14159265358979323846;   // pi
+    constexpr float M_PI = 3.14159265358979323846f;   // pi
 }
 
 

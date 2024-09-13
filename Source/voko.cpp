@@ -410,7 +410,7 @@ void voko::buildMeshes()
 void voko::buildLights() {
     auto spotLights = CurrentScene->get_components<SpotLight>();
 
-    voko_global::SPOT_LIGHT_COUNT = spotLights.size();
+    voko_global::SPOT_LIGHT_COUNT = static_cast<uint32_t>(spotLights.size());
 
     for(uint32_t i = 0; i < spotLights.size();i++) {
         const auto spotLight = spotLights[i];
@@ -419,7 +419,7 @@ void voko::buildLights() {
 
     auto dirLights  = CurrentScene->get_components<Light>();
 
-    voko_global::DIR_LIGHT_COUNT = dirLights.size();
+    voko_global::DIR_LIGHT_COUNT = static_cast<uint32_t>(dirLights.size());
 
     for(uint32_t i = 0; i < dirLights.size();i++) {
         const auto dirLight = dirLights[i];
@@ -819,7 +819,7 @@ void voko::CreatePerMeshDescriptor()
     // [POI] The fragment shader will be using an unsized array of samplers, which has to be marked with the VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT
     VkDescriptorSetLayoutBindingFlagsCreateInfoEXT setLayoutBindingFlags{};
     setLayoutBindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
-    setLayoutBindingFlags.bindingCount = setLayoutBindings.size();
+    setLayoutBindingFlags.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
     // Binding 0&1 is the buffer, which does not use indexing
     // Binding 2-6 are the fragment shader images, which use indexing
     std::vector<VkDescriptorBindingFlagsEXT> descriptorBindingFlags = {
@@ -855,7 +855,7 @@ void voko::CreateAndUploadPerMeshBuffer(Mesh* mesh, uint32_t MeshIndex) const
     uint32_t meshPropsSSBOSize = sizeof(voko_buffer::MeshProperty);
     // 1: Mesh Instance
     vks::Buffer& instanceSSBO = mesh->instanceSSBO;
-    uint32_t instanceSSBOSize = sizeof(voko_buffer::PerInstanceSSBO) * mesh->Instances.size();
+    uint32_t instanceSSBOSize = sizeof(voko_buffer::PerInstanceSSBO) * static_cast<uint32_t>(mesh->Instances.size());
 
     // Create -> map -> upload mesh ssbo
     VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,

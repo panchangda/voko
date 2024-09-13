@@ -156,11 +156,15 @@ void DeferredRenderer::Render()
 
     // lighting waits for:
     // 1: geometry pass, 2: shadow pass
-    submitInfo.waitSemaphoreCount = 2;
-    VkPipelineStageFlags light_pass_wait_stages[2] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    submitInfo.pWaitDstStageMask = light_pass_wait_stages;
-    VkSemaphore lighting_pass_wait_semaphore[2] = {shadow_pass->passSemaphore, geometry_pass->passSemaphore};
-    submitInfo.pWaitSemaphores = lighting_pass_wait_semaphore;
+
+    // submitInfo.waitSemaphoreCount = 2;
+    // VkPipelineStageFlags light_pass_wait_stages[2] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    // submitInfo.pWaitDstStageMask = light_pass_wait_stages;
+    // VkSemaphore lighting_pass_wait_semaphore[2] = {shadow_pass->passSemaphore, geometry_pass->passSemaphore};
+    // submitInfo.pWaitSemaphores = lighting_pass_wait_semaphore;
+
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = &geometry_pass->passSemaphore;
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = &lighting_pass->passSemaphore;
     submitInfo.pCommandBuffers = lighting_pass->getCommandBuffer(voko_global::currentBuffer);
@@ -184,83 +188,87 @@ void DeferredRenderer::Render()
     submitInfo.pWaitSemaphores = &skybox_pass->passSemaphore;
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = &renderComplete;
-    submitInfo.pCommandBuffers = &blitCmdBuffer;
+    submitInfo.pCommandBuffers = &blitCmdBuffers[voko_global::currentBuffer];
     VK_CHECK_RESULT(vkQueueSubmit(gfxQueue, 1, &submitInfo, VK_NULL_HANDLE));
 
 }
 
 void DeferredRenderer::buildBlitPass() {
+    // Build blitBuffers for swapChain images
+    blitCmdBuffers.resize(voko_global::swapChain->images.size());
 
-    blitCmdBuffer = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, false);
+    for (int i = 0; i < voko_global::swapChain->images.size(); i++) {
+        blitCmdBuffers[i] = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, false);
 
-    VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
-    VK_CHECK_RESULT(vkBeginCommandBuffer(blitCmdBuffer, &cmdBufInfo));
-
-
-    VkImage& dstImage = voko_global::swapChain->buffers[voko_global::currentBuffer].image;
-
-    // Set image layout for transfer
-    vks::tools::setImageLayout(
-        blitCmdBuffer,
-        voko_global::sceneColor.image,
-        VK_IMAGE_ASPECT_COLOR_BIT,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-
-    vks::tools::setImageLayout(
-        blitCmdBuffer,
-        dstImage,
-        VK_IMAGE_ASPECT_COLOR_BIT,
-        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
+        VK_CHECK_RESULT(vkBeginCommandBuffer(blitCmdBuffers[i], &cmdBufInfo));
 
 
-    VkImageSubresourceLayers imageSubresource = vks::initializers::imageSubresourceLayers(
-    VK_IMAGE_ASPECT_COLOR_BIT,
-    0,
-    0,
-    1);
+        VkImage &dstImage = voko_global::swapChain->buffers[i].image;
 
-    int32_t srcWidth, srcHeight, dstWidth, dstHeight;
-    srcWidth = dstWidth = static_cast<int32_t>(voko_global::width);
-    srcHeight = dstHeight = static_cast<int32_t>(voko_global::height);
-    // offset0 point to image left top, offset1 point to image right bottom
-    // offset0&1 set image bounds
-    VkOffset3D srcOffsets[2] = {VkOffset3D(0,0,0), VkOffset3D(srcWidth,srcHeight,1)};
-    VkOffset3D dstOffsets[2] = {VkOffset3D(0,0,0), VkOffset3D(dstWidth,dstHeight,1)};
-    VkImageBlit imageBlit = vks::initializers::imageBlit(
-        imageSubresource, srcOffsets,
-        imageSubresource, dstOffsets);
+        // Set image layout for transfer
+        vks::tools::setImageLayout(
+            blitCmdBuffers[i],
+            voko_global::sceneColor.image,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
-    // Blit scene color to swapChain buffer
-    vkCmdBlitImage(blitCmdBuffer,
-        voko_global::sceneColor.image,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        dstImage,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        1,
-        &imageBlit,
-        VK_FILTER_LINEAR);
+        vks::tools::setImageLayout(
+            blitCmdBuffers[i],
+            dstImage,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 
-    // Revert scene color for color write
-    // Set swapChain image for present
-    vks::tools::setImageLayout(
-    blitCmdBuffer,
-    voko_global::sceneColor.image,
-    VK_IMAGE_ASPECT_COLOR_BIT,
-    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    );
-    
-    vks::tools::setImageLayout(
-        blitCmdBuffer,
-        dstImage,
-        VK_IMAGE_ASPECT_COLOR_BIT,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+        VkImageSubresourceLayers imageSubresource = vks::initializers::imageSubresourceLayers(
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            0,
+            0,
+            1);
+
+        int32_t srcWidth, srcHeight, dstWidth, dstHeight;
+        srcWidth = dstWidth = static_cast<int32_t>(voko_global::width);
+        srcHeight = dstHeight = static_cast<int32_t>(voko_global::height);
+        // offset0 point to image left top, offset1 point to image right bottom
+        // offset0&1 set image bounds
+        VkOffset3D srcOffsets[2] = {VkOffset3D(0, 0, 0), VkOffset3D(srcWidth, srcHeight, 1)};
+        VkOffset3D dstOffsets[2] = {VkOffset3D(0, 0, 0), VkOffset3D(dstWidth, dstHeight, 1)};
+        VkImageBlit imageBlit = vks::initializers::imageBlit(
+            imageSubresource, srcOffsets,
+            imageSubresource, dstOffsets);
+
+        // Blit scene color to swapChain buffer
+        vkCmdBlitImage(blitCmdBuffers[i],
+                       voko_global::sceneColor.image,
+                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       dstImage,
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                       1,
+                       &imageBlit,
+                       VK_FILTER_LINEAR);
 
 
-    VK_CHECK_RESULT(vkEndCommandBuffer(blitCmdBuffer));
+        // Revert scene color for color write
+        // Set swapChain image for present
+        vks::tools::setImageLayout(
+            blitCmdBuffers[i],
+            voko_global::sceneColor.image,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+        );
+
+        vks::tools::setImageLayout(
+            blitCmdBuffers[i],
+            dstImage,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+
+        VK_CHECK_RESULT(vkEndCommandBuffer(blitCmdBuffers[i]));
+    }
 }
 

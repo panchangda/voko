@@ -241,7 +241,7 @@ namespace vks
 			attachment.description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			attachment.description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			attachment.description.format = attachment.format;
-			attachment.description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			attachment.description.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 			attachment.description.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 			attachment.subresourceRange.layerCount = 1;
@@ -268,8 +268,8 @@ namespace vks
 			attachment.description.stencilLoadOp = stencilLoadOp;
 			attachment.description.stencilStoreOp = stencilStoreOp;
 			attachment.description.format = attachment.format;
-			attachment.description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			attachment.description.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+			attachment.description.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			attachment.description.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 			attachment.subresourceRange.layerCount = 1;
 
@@ -357,7 +357,7 @@ namespace vks
 			}
 
 			// Use subpass dependencies for attachment layout transitions
-			std::array<VkSubpassDependency, 2> dependencies;
+			std::array<VkSubpassDependency, 4> dependencies;
 
 			dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
 			dependencies[0].dstSubpass = 0;
@@ -375,6 +375,24 @@ namespace vks
 			dependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
 			dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
+
+			// copied from voko::setupRenderPass()
+			dependencies[2].srcSubpass = VK_SUBPASS_EXTERNAL;
+			dependencies[2].dstSubpass = 0;
+			dependencies[2].srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+			dependencies[2].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+			dependencies[2].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			dependencies[2].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+			dependencies[2].dependencyFlags = 0;
+
+			dependencies[3].srcSubpass = VK_SUBPASS_EXTERNAL;
+			dependencies[3].dstSubpass = 0;
+			dependencies[3].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			dependencies[3].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			dependencies[3].srcAccessMask = 0;
+			dependencies[3].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+			dependencies[3].dependencyFlags = 0;
+
 			// Create render pass
 			VkRenderPassCreateInfo renderPassInfo = {};
 			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -382,7 +400,7 @@ namespace vks
 			renderPassInfo.attachmentCount = static_cast<uint32_t>(attachmentDescriptions.size());
 			renderPassInfo.subpassCount = 1;
 			renderPassInfo.pSubpasses = &subpass;
-			renderPassInfo.dependencyCount = 2;
+			renderPassInfo.dependencyCount = dependencies.size();
 			renderPassInfo.pDependencies = dependencies.data();
 			VK_CHECK_RESULT(vkCreateRenderPass(vulkanDevice->logicalDevice, &renderPassInfo, nullptr, &renderPass));
 

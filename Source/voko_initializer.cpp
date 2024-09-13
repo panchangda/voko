@@ -99,8 +99,6 @@ void voko::setupSceneColor()
 
     VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &voko_global::sceneColor.view));
 
-
-
     // set sceneColor infos
     voko_global::sceneColor.format = voko_global::swapChain->colorFormat;
     voko_global::sceneColor.width = voko_global::width;
@@ -146,6 +144,33 @@ void voko::setupDepthStencil()
         imageViewCI.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
     }
     VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &voko_global::depthStencil.view));
+}
+
+/**
+ *
+ * Transform scene images layouts before rendering
+ */
+void voko::setupSceneImageLayout() {
+
+    VkCommandBuffer layoutCmdBuffer = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+    // Set scene color to VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    vks::tools::setImageLayout(
+        layoutCmdBuffer,
+        voko_global::sceneColor.image,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    // Set depth stencil to VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    vks::tools::setImageLayout(
+    layoutCmdBuffer,
+    voko_global::depthStencil.image,
+    VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+    VK_IMAGE_LAYOUT_UNDEFINED,
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+    vulkanDevice->flushCommandBuffer(layoutCmdBuffer, queue, true);
 }
 
 void voko::setupRenderPass()

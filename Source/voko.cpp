@@ -30,6 +30,7 @@ void voko::prepare()
     createSynchronizationPrimitives();
     setupSceneColor();
     setupDepthStencil();
+    setupSceneImageLayout();
     setupRenderPass();
     createPipelineCache();
     setupFrameBuffer();

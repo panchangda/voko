@@ -32,7 +32,7 @@ public:
 
 
     void buildBlitPass();
-    VkCommandBuffer blitCmdBuffer;
+    std::vector<VkCommandBuffer> blitCmdBuffers;
 
 private:
     std::shared_ptr<ShadowPass> shadow_pass;

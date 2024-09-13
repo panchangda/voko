@@ -25,8 +25,8 @@ public:
     	frameBuffer->height = height;
 
     	// load scene color:
-    	frameBuffer->SetSceneColorUsage(VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE);
-    	frameBuffer->SetDepthStencilUsage(VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
+    	frameBuffer->SetSceneColorUsage(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE);
+    	frameBuffer->SetDepthStencilUsage(VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_DONT_CARE,
 			VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE);
 
     	frameBuffer->createRenderPass();
@@ -93,8 +93,8 @@ public:
     	renderPassBeginInfo.framebuffer = frameBuffer->framebuffer;
     	renderPassBeginInfo.renderArea.extent.width = frameBuffer->width;
     	renderPassBeginInfo.renderArea.extent.height = frameBuffer->height;
-    	renderPassBeginInfo.clearValueCount = 2;
-    	renderPassBeginInfo.pClearValues = clearValues;
+    	renderPassBeginInfo.clearValueCount = 0;
+    	renderPassBeginInfo.pClearValues = nullptr;
 
     	VK_CHECK_RESULT(vkBeginCommandBuffer(cmdBuffer, &cmdBufInfo));
 

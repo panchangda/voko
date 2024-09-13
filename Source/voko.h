@@ -83,6 +83,7 @@ public:
     void createSynchronizationPrimitives();
     void setupSceneColor();
     void setupDepthStencil();
+    void setupSceneImageLayout();
     void setupRenderPass();
     void createPipelineCache();
     void setupFrameBuffer();

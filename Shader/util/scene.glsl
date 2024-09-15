@@ -15,10 +15,13 @@ struct UniformBufferView{
     mat4 projectionMatrix;
     mat4 viewMatrix;
     mat4 viewProjectionMatrix;
+    mat4 inverseViewMatrix;
+
     vec4 viewPos;
 };
 
 // Size macros must be same as CPU definitions
+#define SHADOW_MAP_CASCADE_COUNT 4
 #define SPOT_LIGHT_MAX 3
 #define DIR_LIGHT_MAX 4
 struct DirectionalLight{
@@ -36,7 +39,10 @@ struct SpotLight {
     float lightCosInnerAngle;
     float lightCosOuterAngle;
 };
-
+struct Cascade {
+    float splitDepth;
+    mat4 viewProjMatrix;
+};
 struct UniformBufferLighting{
     // lights
     uint lightModel;
@@ -52,6 +58,9 @@ struct UniformBufferLighting{
     uint useIBL;
 
     // shadows
+    // cascade params
+    Cascade cascade[SHADOW_MAP_CASCADE_COUNT];
+
     uint useShadows;
     uint shadowFilterMethod; // 0:PCF, 1:PCSS
     float shadowFactor;

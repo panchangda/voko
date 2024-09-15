@@ -61,7 +61,9 @@ void voko::prepare()
     
     // Load Assets & Create Scene graph
     // loadScene();
-    loadScene2();
+    // loadScene2();
+    loadScene3();
+
     buildScene();
 
     // Scene Renderer
@@ -367,25 +369,49 @@ void voko::loadScene2() {
     }
 
 
-    // IBL: cubes & env cube map
-    // enable ibl for environment lighting
-    uniformBufferLighting.useIBL = 1;
 
-    bComputeIBL = true;
-    // Add cube mesh for ibl calculation
-    voko_global::skybox.loadFromFile(getAssetPath() + "models/cube.gltf", vulkanDevice, queue, glTFLoadingFlags);
-    // environment cube map
-    iblTextures.environmentCube.loadFromFile(getAssetPath() + "textures/hdr/gcanyon_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
+}
+
+void voko::loadScene3() {
+    // Add 1 Directional Light
+    std::unique_ptr<DirectionalLight> dirLight = std::make_unique<DirectionalLight>("DirectionalLight0" );
+    std::unique_ptr<Node> OwnerNode = std::make_unique<Node>(0, "DirLightNode");
+    dirLight->set_node(*OwnerNode);
+    dirLight->set_properties(std::forward{
+        .directional = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),
+        .color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),
+        .intensity = 1.0f
+    });
+    CurrentScene->add_node(std::move(OwnerNode));
+    CurrentScene->add_component(std::move(dirLight));
+
+    // Add instanced objects for shadow quality visualization
+    const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::FlipY;
+    std::unique_ptr<Node> cubeNode = std::make_unique<Node>(0, "CubeNode");
+    std::unique_ptr<Mesh> cube = std::make_unique<Mesh>("Cube");
+    cube->VkGltfModel.loadFromFile(getAssetPath() + "models/cube.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    for(int i=0;i<10.0;i++) {
+        cube->Instances.push_back(voko_buffer::PerInstanceSSBO{.instancePos = glm::vec4(i,i,i,1.0f)});
+    }
+    // cube has no texture
+    cube->meshProperty.usedSamplers = 0;
+    cube->set_node(*cubeNode);
+    CurrentScene->add_component(std::move(cube));
+    CurrentScene->add_node(std::move(cubeNode));
+
+
+    // std::unique_ptr<Node> sphereNode = std::make_unique<Node>(0, "SphereNode");
+    // std::unique_ptr<Mesh> sphere = std::make_unique<Mesh>("Sphere");
+    // sphere->VkGltfModel.loadFromFile(getAssetPath() + "models/sphere.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    // sphere->meshProperty.usedSamplers = 0;
+    // sphere->set_node(*sphereNode);
+    // CurrentScene->add_component(std::move(sphere));
+    // CurrentScene->add_node(std::move(sphereNode));
 }
 
 void voko::buildScene() {
-    // Precompute IBL
-    if(bComputeIBL) {
-        generateBRDFLUT();
-        generateIrradianceCube();
-        generatePrefilteredCube();
-        bComputeIBL = false;
-    }
+
+    buildIBL();
 
     buildMeshes();
 
@@ -393,6 +419,30 @@ void voko::buildScene() {
 
     CreateSceneUniformBuffer();
     CreateSceneDescriptor();
+}
+
+void voko::buildIBL() {
+
+    // Enable ibl for environment lighting
+    uniformBufferLighting.useIBL = 1;
+
+    // IBL preparations: cubes & env cube map
+    // Add cube mesh for ibl calculation
+    const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::PreMultiplyVertexColors | vkglTF::FileLoadingFlags::FlipY;
+    voko_global::skybox.loadFromFile(getAssetPath() + "models/cube.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    // environment cube map
+    iblTextures.environmentCube.loadFromFile(getAssetPath() + "textures/hdr/gcanyon_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
+    // Precompute IBL
+    bComputeIBL = true;
+
+    if(bComputeIBL) {
+        generateBRDFLUT();
+        generateIrradianceCube();
+        generatePrefilteredCube();
+        bComputeIBL = false;
+    }
+
+
 }
 
 void voko::buildMeshes()

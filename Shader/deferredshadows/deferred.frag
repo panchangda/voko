@@ -38,6 +38,19 @@ float textureProj(vec4 P, float layer, vec2 offset)
 	return shadow;
 }
 
+float cascadeProj(vec4 P, float cascadeIndex, vec2 offset){
+	float shadow = 1.0;
+	float bias = 0.005;
+
+	if ( shadowCoord.z > -1.0 && shadowCoord.z < 1.0 ) {
+		float dist = texture(samplerShadowMap, vec3(shadowCoord.st + offset, cascadeIndex)).r;
+		if (shadowCoord.w > 0 && dist < shadowCoord.z - bias) {
+			shadow = ambient;
+		}
+	}
+	return shadow;
+}
+
 float filterPCF(vec4 shadowClip, float layer)
 {
 	ivec2 texDim = textureSize(samplerShadowMap, 0).xy;
@@ -201,6 +214,7 @@ vec3 phong(vec3 L, vec3 V, vec3 N, vec3 albedo, vec3 lightColor, float intensity
 
 
 // ----------------------------------------------------------------------------
+
 void main() 
 {
 	// Get G-Buffer values
@@ -290,17 +304,30 @@ void main()
 		vec3 Lo = vec3(0.0);
 		switch (uboLighting.lightModel){
 			case 0: // PBR
-				fragColor += PBR(L, V, N, metallic, roughness, albedo.rgb, dir_light.color.rgb, dir_light.intensity);
+				Lo += PBR(L, V, N, metallic, roughness, albedo.rgb, dir_light.color.rgb, dir_light.intensity);
 				break;
 			case 1: // Blinn-Phong
-				fragColor += blinnPhong(L, V, N, albedo.rgb, dir_light.color.rgb, dir_light.intensity);
+				Lo += blinnPhong(L, V, N, albedo.rgb, dir_light.color.rgb, dir_light.intensity);
 				break;
 			case 2: // Phong
-				fragColor += phong(L, V, N, albedo.rgb, dir_light.color.rgb, dir_light.intensity, albedo.a * 2.5);
+				Lo += phong(L, V, N, albedo.rgb, dir_light.color.rgb, dir_light.intensity, albedo.a * 2.5);
 				break;
 			default:
-				fragColor += vec3(0.0);
+				Lo += vec3(0.0);
 		}
+
+		vec3 fragPosInView = uboView.viewMatrix * fragPos;
+		// Get cascade index for the current fragment's view position
+		uint cascadeIndex = 0;
+		for(uint j = 0; j < SHADOW_MAP_CASCADE_COUNT - 1; ++j) {
+			if(fragPosInView.z < uboLighting.cascade[j].splitDepth) {
+				cascadeIndex = i + 1;
+			}
+		}
+
+		// Depth compare for shadowing
+		vec4 shadowCoord = (biasMat * ubo.cascadeViewProjMat[cascadeIndex]) * vec4(inPos, 1.0);
+
 	}
 
 	// spot lights

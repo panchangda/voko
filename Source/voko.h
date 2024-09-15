@@ -182,8 +182,10 @@ public:
 
     void loadScene();
     void loadScene2();
+    void loadScene3();
 
     void buildScene();
+    void buildIBL();
     void buildMeshes();
     void buildLights();
 

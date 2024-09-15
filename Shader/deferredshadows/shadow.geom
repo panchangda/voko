@@ -5,7 +5,9 @@
 #include "../util/mesh.glsl"
 
 
-layout (triangles, invocations = SPOT_LIGHT_MAX) in;
+layout (triangles, invocations =
+	SPOT_LIGHT_MAX + SHADOW_MAP_CASCADE_COUNT
+) in;
 layout (triangle_strip, max_vertices = 3) out;
 
 
@@ -19,7 +21,17 @@ void main()
 	{
 		gl_Layer = gl_InvocationID;
 		vec4 tmpPos = gl_in[i].gl_Position + instancedPos;
-		gl_Position = uboLighting.spotLights[gl_InvocationID].viewMatrix * tmpPos;
+		if(gl_InvocationID < SPOT_LIGHT_MAX)
+		{
+			uint spotLightIndex = gl_InvocationID - 0;
+			gl_Position = uboLighting.spotLights[gl_InvocationID].viewMatrix * tmpPos;
+		}
+		else if(gl_InvocationID < SPOT_LIGHT_MAX + SHADOW_MAP_CASCADE_COUNT)
+		{
+			uint cascadeIndex = gl_InvocationID - SPOT_LIGHT_MAX;
+			gl_Position = uboLighting.cascade[cascadeIndex].viewProjMatrix * tmpPos;
+		}
+
 		EmitVertex();
 	}
 	EndPrimitive();

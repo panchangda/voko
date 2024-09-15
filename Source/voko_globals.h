@@ -19,6 +19,9 @@ namespace voko_global
     constexpr int MESH_MAX = 100;
     constexpr int MESH_SAMPLER_MAX = 12;
     constexpr int MESH_SAMPLER_COUNT = 2;
+    constexpr int SHADOW_MAP_CASCADE_COUNT = 4;
+
+    extern float cascadeSplitLambda;
 
     extern int SPOT_LIGHT_COUNT;
     extern int DIR_LIGHT_COUNT;

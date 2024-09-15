@@ -1017,3 +1017,5 @@ void voko::generatePrefilteredCube() {
     std::cout << "Generating pre-filtered enivornment cube with " << numMips << " mip levels took " << tDiff << " ms" <<
             std::endl;
 }
+
+

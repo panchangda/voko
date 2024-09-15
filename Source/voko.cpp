@@ -335,16 +335,16 @@ void voko::loadScene2() {
     CurrentScene->add_node(std::move(cerberusNode));
 
     // Add background wall
-    // std::unique_ptr<Node> StoneFloor02Node = std::make_unique<Node>(0, "StoneFloor02");
-    // std::unique_ptr<Mesh> StoneFloor02 = std::make_unique<Mesh>("StoneFloor02");
-    // StoneFloor02->VkGltfModel.loadFromFile(getAssetPath() + "models/deferred_box.gltf", vulkanDevice, queue, glTFLoadingFlags);
-    // // StoneFloor02 has only albedo & normal map
-    // StoneFloor02->meshProperty.usedSamplers = voko_global::EMeshSamplerFlags::ALBEDO | voko_global::EMeshSamplerFlags::NORMAL;
-    // StoneFloor02->Textures.albedoMap.loadFromFile(getAssetPath() + "textures/stonefloor02_color_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
-    // StoneFloor02->Textures.normalMap.loadFromFile(getAssetPath() + "textures/stonefloor02_normal_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
-    // StoneFloor02->set_node(*StoneFloor02Node);
-    // CurrentScene->add_component(std::move(StoneFloor02));
-    // CurrentScene->add_node(std::move(StoneFloor02Node));
+    std::unique_ptr<Node> StoneFloor02Node = std::make_unique<Node>(0, "StoneFloor02");
+    std::unique_ptr<Mesh> StoneFloor02 = std::make_unique<Mesh>("StoneFloor02");
+    StoneFloor02->VkGltfModel.loadFromFile(getAssetPath() + "models/deferred_box.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    // StoneFloor02 has only albedo & normal map
+    StoneFloor02->meshProperty.usedSamplers = voko_global::EMeshSamplerFlags::ALBEDO | voko_global::EMeshSamplerFlags::NORMAL;
+    StoneFloor02->Textures.albedoMap.loadFromFile(getAssetPath() + "textures/stonefloor02_color_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    StoneFloor02->Textures.normalMap.loadFromFile(getAssetPath() + "textures/stonefloor02_normal_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    StoneFloor02->set_node(*StoneFloor02Node);
+    CurrentScene->add_component(std::move(StoneFloor02));
+    CurrentScene->add_node(std::move(StoneFloor02Node));
 
     // Add 4 directional lights
     const float p = 15.0f;
@@ -440,7 +440,7 @@ void voko::render()
     if (!prepared) 
     	return;
 
-    
+    updateCSM();
     UpdateSceneUniformBuffer();
 
     draw();
@@ -717,9 +717,11 @@ void voko::CreateSceneDescriptor()
         vks::initializers::writeDescriptorSet(voko_global::SceneDescriptorSet,
                                               VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0,
                                               &SceneUB.descriptor),
+        // Binding 1: Environment map
         vks::initializers::writeDescriptorSet(voko_global::SceneDescriptorSet,
                                               VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1,
                                               &iblTextures.environmentCube.descriptor),
+        // Binding 2: IBLs
         vks::initializers::writeDescriptorSet(voko_global::SceneDescriptorSet,
                                               VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2,
                                               &iblTextures.irradianceCube.descriptor),
@@ -751,6 +753,7 @@ void voko::UpdateSceneUniformBuffer()
     // Update view (camera)
     uniformBufferView.projectionMatrix = camera.matrices.perspective;
     uniformBufferView.viewMatrix = camera.matrices.view;
+    uniformBufferView.inverseViewMatrix = glm::inverse(camera.matrices.view);
 
     // why revert x&z? 
     uniformBufferView.viewPos = glm::vec4(camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);;
@@ -778,6 +781,93 @@ void voko::UpdateSceneUniformBuffer()
         uniformBufferLighting.spotLights[i].viewMatrix = shadowProj * shadowView;
     }
     memcpy(SceneUB.mapped, &uniformBufferScene, sizeof(uniformBufferScene));
+}
+
+/*
+	Calculate frustum split depths and matrices for the shadow map cascades
+	Based on https://johanmedestrom.wordpress.com/2016/03/18/opengl-cascaded-shadow-maps/
+*/
+void voko::updateCSM()
+{
+	float cascadeSplits[voko_global::SHADOW_MAP_CASCADE_COUNT];
+
+	float nearClip = camera.getNearClip();
+	float farClip = camera.getFarClip();
+	float clipRange = farClip - nearClip;
+
+	float minZ = nearClip;
+	float maxZ = nearClip + clipRange;
+
+	float range = maxZ - minZ;
+	float ratio = maxZ / minZ;
+
+	// Calculate split depths based on view camera frustum
+	// Based on method presented in https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch10.html
+	for (uint32_t i = 0; i < voko_global::SHADOW_MAP_CASCADE_COUNT; i++) {
+		float p = (i + 1) / static_cast<float>(voko_global::SHADOW_MAP_CASCADE_COUNT);
+		float log = minZ * std::pow(ratio, p);
+		float uniform = minZ + range * p;
+		float d = voko_global::cascadeSplitLambda * (log - uniform) + uniform;
+		cascadeSplits[i] = (d - nearClip) / clipRange;
+	}
+
+	// Calculate orthographic projection matrix for each cascade
+	float lastSplitDist = 0.0;
+	for (uint32_t i = 0; i < voko_global::SHADOW_MAP_CASCADE_COUNT; i++) {
+		float splitDist = cascadeSplits[i];
+
+		glm::vec3 frustumCorners[8] = {
+			glm::vec3(-1.0f,  1.0f, 0.0f),
+			glm::vec3( 1.0f,  1.0f, 0.0f),
+			glm::vec3( 1.0f, -1.0f, 0.0f),
+			glm::vec3(-1.0f, -1.0f, 0.0f),
+			glm::vec3(-1.0f,  1.0f,  1.0f),
+			glm::vec3( 1.0f,  1.0f,  1.0f),
+			glm::vec3( 1.0f, -1.0f,  1.0f),
+			glm::vec3(-1.0f, -1.0f,  1.0f),
+		};
+
+		// Project frustum corners into world space
+		glm::mat4 invCam = glm::inverse(camera.matrices.perspective * camera.matrices.view);
+		for (uint32_t j = 0; j < 8; j++) {
+			glm::vec4 invCorner = invCam * glm::vec4(frustumCorners[j], 1.0f);
+			frustumCorners[j] = invCorner / invCorner.w;
+		}
+
+		for (uint32_t j = 0; j < 4; j++) {
+			glm::vec3 dist = frustumCorners[j + 4] - frustumCorners[j];
+			frustumCorners[j + 4] = frustumCorners[j] + (dist * splitDist);
+			frustumCorners[j] = frustumCorners[j] + (dist * lastSplitDist);
+		}
+
+		// Get frustum center
+		glm::vec3 frustumCenter = glm::vec3(0.0f);
+		for (uint32_t j = 0; j < 8; j++) {
+			frustumCenter += frustumCorners[j];
+		}
+		frustumCenter /= 8.0f;
+
+		float radius = 0.0f;
+		for (uint32_t j = 0; j < 8; j++) {
+			float distance = glm::length(frustumCorners[j] - frustumCenter);
+			radius = glm::max(radius, distance);
+		}
+		radius = std::ceil(radius * 16.0f) / 16.0f;
+
+		glm::vec3 maxExtents = glm::vec3(radius);
+		glm::vec3 minExtents = -maxExtents;
+
+	    glm::vec3 lightPos = uniformBufferLighting.dirLights[i].direction;
+		glm::vec3 lightDir = glm::normalize(-lightPos);
+		glm::mat4 lightViewMatrix = glm::lookAt(frustumCenter - lightDir * -minExtents.z, frustumCenter, glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 lightOrthoMatrix = glm::ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, 0.0f, maxExtents.z - minExtents.z);
+
+		// Store split distance and matrix in cascade
+		uniformBufferLighting.cascade[i].splitDepth = (camera.getNearClip() + splitDist * clipRange) * -1.0f;
+		uniformBufferLighting.cascade[i].viewProjMatrix = lightOrthoMatrix * lightViewMatrix;
+
+		lastSplitDist = cascadeSplits[i];
+	}
 }
 
 void voko::CreatePerMeshDescriptor()

@@ -122,9 +122,15 @@ namespace voko_buffer {
         glm::mat4 projectionMatrix;
         glm::mat4 viewMatrix;
         glm::mat4 viewProjectionMatrix;
+        glm::mat4 inverseViewMatrix;
+
         glm::vec4 viewPos;
     };
 
+    struct alignas(16) Cascade {
+        float splitDepth;
+        glm::mat4 viewProjMatrix;
+    };
     struct alignas(16) UniformBufferLighting {
         // lights
         uint32_t lightModel = 0; // 0:PBR, 1:Blinn-Phong, 2:Phong
@@ -138,10 +144,18 @@ namespace voko_buffer {
         uint32_t useIBL = 1;
 
         // shadow
+        // cascade params
+        Cascade cascade[voko_global::SHADOW_MAP_CASCADE_COUNT];
+
         uint32_t useShadows = 1;
         uint32_t shadowFilterMethod = 1; // 0:Fixed size shadow factor, 1:PCF, 2:PCSS
         float shadowFactor = 0.1f;
     };
+
+    // struct alignas(16) UniformBufferShadow {
+    //
+    // };
+
     // debug switch & offs
     struct UniformBufferDebug {
         uint32_t debugGBuffer = 0; // 0:off, 1:shadow, 2:fragPos, 3:normal, 4:albedo.rgb, 5:albedo.aaa

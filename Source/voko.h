@@ -210,7 +210,13 @@ public:
     void generateBRDFLUT();
     void generateIrradianceCube();
     void generatePrefilteredCube();
-    void buildSkyboxForRendering();
+
+
+    // CSM Calculation
+    void updateCSM();
+
+
+
 
     /* Initialization funcs & vars*/
 	void init();

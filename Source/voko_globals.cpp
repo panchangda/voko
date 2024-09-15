@@ -5,6 +5,7 @@
 namespace voko_global
 {
     // Consts & Counts
+    float cascadeSplitLambda = 0.95f;
     int SPOT_LIGHT_COUNT = 3;
     int DIR_LIGHT_COUNT = 4;
     int MESH_COUNT = 0;

@@ -16,7 +16,7 @@ void main()
     vec3 color = texture(samplerSceneColor, inUV).rgb;
 
     // Tone mapping
-    const float exposure = 1.0;
+    const float exposure = 4.5;
     color = Uncharted2Tonemap( color.rgb * exposure).rgb;
     color = color * (1.0f / Uncharted2Tonemap(vec3(11.2f)));
 

@@ -113,6 +113,7 @@ DeferredRenderer::DeferredRenderer(
         EPassAttachmentType::OffScreen
     );
 
+    // todo: use ping pong to replace full screen blit
     // Build blit pass
     buildBlitPass();
 }

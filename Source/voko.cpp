@@ -318,7 +318,7 @@ void voko::loadScene2() {
     CurrentScene = std::make_unique<Scene>("Scene2: PBR Texture + IBL");
     const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::PreMultiplyVertexColors | vkglTF::FileLoadingFlags::FlipY;
 
-    // cerberus mesh + pbr textures
+    // Add cerberus mesh + pbr textures
     std::unique_ptr<Node> cerberusNode = std::make_unique<Node>(0, "cerberus");;
     std::unique_ptr<Mesh> cerberus = std::make_unique<Mesh>("cerberus");
     cerberus->VkGltfModel.loadFromFile(getAssetPath() + "models/cerberus/cerberus.gltf", vulkanDevice, queue, glTFLoadingFlags);
@@ -334,17 +334,17 @@ void voko::loadScene2() {
     CurrentScene->add_component(std::move(cerberus));
     CurrentScene->add_node(std::move(cerberusNode));
 
-    // background wall
-    std::unique_ptr<Node> StoneFloor02Node = std::make_unique<Node>(0, "StoneFloor02");
-    std::unique_ptr<Mesh> StoneFloor02 = std::make_unique<Mesh>("StoneFloor02");
-    StoneFloor02->VkGltfModel.loadFromFile(getAssetPath() + "models/deferred_box.gltf", vulkanDevice, queue, glTFLoadingFlags);
-    // StoneFloor02 has only albedo & normal map
-    StoneFloor02->meshProperty.usedSamplers = voko_global::EMeshSamplerFlags::ALBEDO | voko_global::EMeshSamplerFlags::NORMAL;
-    StoneFloor02->Textures.albedoMap.loadFromFile(getAssetPath() + "textures/stonefloor02_color_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
-    StoneFloor02->Textures.normalMap.loadFromFile(getAssetPath() + "textures/stonefloor02_normal_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
-    StoneFloor02->set_node(*StoneFloor02Node);
-    CurrentScene->add_component(std::move(StoneFloor02));
-    CurrentScene->add_node(std::move(StoneFloor02Node));
+    // Add background wall
+    // std::unique_ptr<Node> StoneFloor02Node = std::make_unique<Node>(0, "StoneFloor02");
+    // std::unique_ptr<Mesh> StoneFloor02 = std::make_unique<Mesh>("StoneFloor02");
+    // StoneFloor02->VkGltfModel.loadFromFile(getAssetPath() + "models/deferred_box.gltf", vulkanDevice, queue, glTFLoadingFlags);
+    // // StoneFloor02 has only albedo & normal map
+    // StoneFloor02->meshProperty.usedSamplers = voko_global::EMeshSamplerFlags::ALBEDO | voko_global::EMeshSamplerFlags::NORMAL;
+    // StoneFloor02->Textures.albedoMap.loadFromFile(getAssetPath() + "textures/stonefloor02_color_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    // StoneFloor02->Textures.normalMap.loadFromFile(getAssetPath() + "textures/stonefloor02_normal_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+    // StoneFloor02->set_node(*StoneFloor02Node);
+    // CurrentScene->add_component(std::move(StoneFloor02));
+    // CurrentScene->add_node(std::move(StoneFloor02Node));
 
     // Add 4 directional lights
     const float p = 15.0f;
